@@ -20,17 +20,17 @@ game_config = EasyDict(
         #  when env_num>1, the action mask for different env may be different.
         mcts_ctree=False,
         battle_mode='self_play_mode',
-        game_history_length=36,
+        game_block_length=36,
         # battle_mode='play_with_bot_mode',
-        # game_history_length=18,
+        # game_block_length=18,
         image_based=False,
         cvt_string=False,
-        clip_reward=True,
+        clip_rewards=True,
         game_wrapper=True,
         action_space_size=int(board_size * board_size),
         amp_type='none',
         obs_shape=(12, board_size, board_size),  # if frame_stack_num=4
-        image_channel=3,
+        image_channel=1,
         gray_scale=False,
         downsample=False,
         monitor_statistics=True,
@@ -68,8 +68,8 @@ game_config = EasyDict(
         revisit_policy_search_rate=0.99,
 
         # TODO(pu): why not use adam?
-        # lr_manually=True,
-        lr_manually=False,  # use fixed lr
+        # lr_piecewise_constant_decay=True,
+        lr_piecewise_constant_decay=False,  # use fixed lr
 
         # use_priority=False,
         # use_max_priority_for_new_data=True,
@@ -77,9 +77,9 @@ game_config = EasyDict(
         use_max_priority_for_new_data=True,
 
         # TODO(pu): only used for adjust temperature manually
-        max_training_steps=int(1e5),
-        auto_temperature=False,
-        # only effective when auto_temperature=False
+        threshold_training_steps_for_final_lr_temperature=int(threshold_env_steps_for_final_lr_temperature/collector_env_num/average_episode_length_when_converge * update_per_collect),
+        manual_temperature_decay=False,
+        # only effective when manual_temperature_decay=False
         fixed_temperature_value=0.25,
         # TODO(pu): whether to use root value in reanalyzing?
         use_root_value=False,
@@ -112,7 +112,7 @@ game_config = EasyDict(
         checkpoint_interval=100,
         target_model_interval=200,
         save_ckpt_interval=10000,
-        discount=1,
+        discount_factor=1,
         dirichlet_alpha=0.3,
         value_delta_max=0.01,
         num_actors=1,

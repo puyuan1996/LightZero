@@ -15,8 +15,8 @@ evaluator_env_num = 3
 num_simulations = 50
 # update_per_collect determines the number of training steps after each collection of a batch of data.
 # For different env, we have different episode_length,
-# we usually set update_per_collect = collector_env_num * episode_length * reuse_factor
-update_per_collect = 250
+# we usually set update_per_collect = collector_env_num * episode_length / batch_size * reuse_factor
+update_per_collect = 200
 batch_size = 256
 max_env_step = int(1e6)
 # ==============================================================
@@ -79,13 +79,13 @@ lunarlander_disc_efficientzero_config = dict(
             lstm_hidden_size=256,
             # whether to use discrete support to represent categorical distribution for value, reward/value_prefix.
             categorical_distribution=True,
-            representation_model_type='conv_res_blocks',  # options={'conv_res_blocks', 'identity'}
+            representation_network_type='conv_res_blocks',  # options={'conv_res_blocks', 'identity'}
         ),
         # learn_mode config
         learn=dict(
             update_per_collect=update_per_collect,
             batch_size=batch_size,
-            lr_manually=True,
+            lr_piecewise_constant_decay=True,
             optim_type='SGD',
             learning_rate=0.2,  # init lr for manually decay schedule
             # Frequency of target network update.
@@ -100,7 +100,7 @@ lunarlander_disc_efficientzero_config = dict(
         eval=dict(evaluator=dict(eval_freq=int(2e3), )),
         other=dict(
             # NOTE: the replay_buffer_size is ineffective,
-            # we specify it using ``max_total_transitions`` in the following game config
+            # we specify it using ``replay_buffer_size`` in the following game config
             replay_buffer=dict(type='game_buffer_efficientzero')
         ),
         # ==============================================================
@@ -112,7 +112,7 @@ lunarlander_disc_efficientzero_config = dict(
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
         env_type='not_board_games',
-        game_history_length=200,
+        game_block_length=200,
 
         ## observation
         # the key difference setting between image-input and vector input.
@@ -127,7 +127,7 @@ lunarlander_disc_efficientzero_config = dict(
 
         ## learn
         num_simulations=num_simulations,
-        lr_manually=True,
+        lr_piecewise_constant_decay=True,
         td_steps=5,
         num_unroll_steps=5,
         lstm_horizon_len=5,
@@ -137,13 +137,15 @@ lunarlander_disc_efficientzero_config = dict(
         value_loss_weight=0.25,
         policy_loss_weight=1,
         ssl_loss_weight=2,
-        # ``fixed_temperature_value`` is effective only when ``auto_temperature=False``.
-        auto_temperature=False,
-        fixed_temperature_value=0.25,
+        # ``fixed_temperature_value`` is effective only when ``manual_temperature_decay=False``.
         # the size/capacity of replay_buffer
-        max_total_transitions=int(1e5),
-        # ``max_training_steps`` is only used for adjusting temperature manually.
-        max_training_steps=int(1e5),
+        replay_buffer_size=int(1e6),
+        # ``threshold_training_steps_for_final_lr`` is only used for adjusting lr manually.
+        threshold_training_steps_for_final_lr=int(
+            threshold_env_steps_for_final_lr / collector_env_num / average_episode_length_when_converge * update_per_collect),
+        # ``threshold_training_steps_for_final_temperature`` is only used for adjusting temperature manually.
+        threshold_training_steps_for_final_temperature=int(
+            threshold_env_steps_for_final_temperature / collector_env_num / average_episode_length_when_converge * update_per_collect),
 
         ## reanalyze
         reanalyze_ratio=0.3,
@@ -175,14 +177,14 @@ lunarlander_disc_efficientzero_create_config = dict(
         import_names=['lzero.policy.efficientzero'],
     ),
     collector=dict(
-        type='episode_efficientzero',
+        type='episode_muzero',
         get_train_sample=True,
-        import_names=['lzero.worker.efficientzero_collector'],
+        import_names=['lzero.worker.muzero_collector'],
     )
 )
 lunarlander_disc_efficientzero_create_config = EasyDict(lunarlander_disc_efficientzero_create_config)
 create_config = lunarlander_disc_efficientzero_create_config
 
 if __name__ == "__main__":
-    from lzero.entry import serial_pipeline_efficientzero_eval
-    serial_pipeline_efficientzero_eval([main_config, create_config], seed=0, max_env_step=max_env_step)
+    from lzero.entry import eval_muzero
+    eval_muzero([main_config, create_config], seed=0, max_env_step=max_env_step)

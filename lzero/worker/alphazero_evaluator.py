@@ -1,15 +1,12 @@
-import os
 from collections import namedtuple
-from ding.envs import BaseEnv
 from typing import Optional, Callable, Tuple
 
-from easydict import EasyDict
-from ding.envs import BaseEnvManager
 import numpy as np
-from ding.utils.data import default_decollate
-from ding.utils import build_logger, EasyTimer, SERIAL_EVALUATOR_REGISTRY, ENV_REGISTRY
+from ding.envs import BaseEnv
 from ding.envs import BaseEnvManager
+from ding.utils import build_logger, EasyTimer, SERIAL_EVALUATOR_REGISTRY
 from ding.worker.collector.base_serial_evaluator import ISerialEvaluator, VectorEvalMonitor
+from easydict import EasyDict
 
 
 @SERIAL_EVALUATOR_REGISTRY.register('alphazero')
@@ -33,6 +30,19 @@ class AlphaZeroEvaluator(ISerialEvaluator):
         instance_name: Optional[str] = 'evaluator',
         env_config=None,
     ):
+        """
+        Overview:
+            Init the AlphaZero evaluator according to input arguments.
+        Arguments:
+            - cfg (:obj:`EasyDict`): Config.
+            - env (:obj:`BaseEnvManager`): The env for the collection, the BaseEnvManager object or \
+                its derivatives are supported.
+            - policy (:obj:`Policy`): The policy to be collected.
+            - tb_logger (:obj:`SummaryWriter`): Logger, defaultly set as 'SummaryWriter' for model summary.
+            - exp_name (:obj:`str`): Experiment name, which is used to indicate output directory.
+            - instance_name (:obj:`Optional[str]`): Name of this instance.
+            - env_config: Config of environment
+        """
         self._cfg = cfg
         self._exp_name = exp_name
         self._instance_name = instance_name
@@ -136,6 +146,8 @@ class AlphaZeroEvaluator(ISerialEvaluator):
         Overview:
             Determine whether you need to start the evaluation mode, if the number of training has reached\
                 the maximum number of times to start the evaluator, return True
+        Arguments:
+            - train_iter (:obj:`int`): Current training iteration.
         """
         if train_iter == self._last_eval_iter:
             return False
@@ -152,7 +164,7 @@ class AlphaZeroEvaluator(ISerialEvaluator):
             n_episode: Optional[int] = None,
             force_render: bool = False,
     ) -> Tuple[bool, dict]:
-        '''
+        """
         Overview:
             Evaluate policy and store the best policy based on whether it reaches the highest historical reward.
         Arguments:
@@ -163,13 +175,12 @@ class AlphaZeroEvaluator(ISerialEvaluator):
         Returns:
             - stop_flag (:obj:`bool`): Whether this training program can be ended.
             - return_info (:obj:`dict`): Current evaluation return information.
-        '''
+        """
         stop_flag, return_info = False, []
         if n_episode is None:
             n_episode = self._default_n_episode
         assert n_episode is not None, "please indicate eval n_episode"
         envstep_count = 0
-        info = {}
         eval_monitor = VectorEvalMonitor(self._env.env_num, n_episode)
         self._env.reset()
         self._policy.reset()
@@ -179,9 +190,17 @@ class AlphaZeroEvaluator(ISerialEvaluator):
                 obs = self._env.ready_obs
                 simulation_envs = {}
                 for env_id in list(obs.keys()):
-                    simulation_envs[env_id] = ENV_REGISTRY.build(self._cfg.env.type, self._env_config)
+                    # create the new simulation env instances from the current evaluate env using the same env_config.
+                    simulation_envs[env_id] = self._env._env_fn[env_id]()
+
+                # ==============================================================
+                # policy forward
+                # ==============================================================
                 policy_output = self._policy.forward(simulation_envs, obs)
                 actions = {env_id: output['action'] for env_id, output in policy_output.items()}
+                # ==============================================================
+                # Interact with env.
+                # ==============================================================
                 timesteps = self._env.step(actions)
                 for env_id, t in timesteps.items():
                     if t.info.get('abnormal', False):

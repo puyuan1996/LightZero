@@ -1,12 +1,18 @@
 """
-Acknowledgement: The following code is adapted from https://github.com/YeWR/EfficientZero/core/model.py
+Overview:
+    In this file, we provide a set of utility functions for probing network parameters and gradients,
+    which can be helpful in analyzing and debugging the inner workings of various models.
 """
+
 import torch
 import numpy as np
 
 
 def renormalize(input, first_dim=1):
-    # normalize the input (states)
+    """
+    Overview:
+        normalize the input states using the max-min-normalization.
+    """
     if first_dim < 0:
         first_dim = len(input.shape) + first_dim
     flat_input = input.view(*input.shape[:first_dim], -1)

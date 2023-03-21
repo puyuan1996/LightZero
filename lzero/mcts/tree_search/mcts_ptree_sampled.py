@@ -1,13 +1,10 @@
-"""
-The following code is adapted from https://github.com/werner-duvaud/muzero-general
-"""
 import copy
 
 import numpy as np
 import torch
 from easydict import EasyDict
 
-from ..scaling_transform import inverse_scalar_transform
+from lzero.policy.scaling_transform import inverse_scalar_transform
 from lzero.mcts.ptree import MinMaxStatsList
 
 ###########################################################
@@ -18,15 +15,27 @@ import lzero.mcts.ptree.ptree_sez as tree_sez
 
 
 class SampledEfficientZeroMCTSPtree(object):
+    """
+    Overview:
+        MCTSPtree for Sampled EfficientZero. The core ``batch_traverse`` and ``batch_backpropagate`` function is implemented in python.
+    Interfaces:
+        __init__, search
+    """
+    
+    # the default_config for SampledEfficientZeroMCTSPtree.
     config = dict(
-        cuda=True,
-        pb_c_base=19652,
-        pb_c_init=1.25,
         support_scale=300,
-        discount=0.997,
+        discount_factor=0.997,
         num_simulations=50,
         categorical_distribution=True,
         lstm_horizon_len=5,
+        # UCB related config
+        root_dirichlet_alpha=0.3,
+        root_exploration_fraction=0.25,
+        pb_c_base=19652,
+        pb_c_init=1.25,
+        value_delta_max=0.01,
+
     )
 
     @classmethod
@@ -36,12 +45,36 @@ class SampledEfficientZeroMCTSPtree(object):
         return cfg
 
     def __init__(self, cfg=None):
-        # NOTE: utilize the default config
+        """
+        Overview:
+            Use the default configuration mechanism. If a user passes in a cfg with a key that matches an existing key
+            in the default configuration, the user-provided value will override the default configuration. Otherwise,
+            the default configuration will be used.
+        """
         default_config = self.default_config()
         default_config.update(cfg)
         self._cfg = default_config
-        
-    def search(self, roots, model, hidden_state_roots, reward_hidden_state_roots, to_play=None):
+
+    @classmethod
+    def Roots(cls, root_num, legal_action_lis, action_space_size,
+                    num_of_sampled_actions, continuous_action_space):
+        """
+        Overview:
+            Initialization of CNode with root_num, legal_actions_list, action_space_size, num_of_sampled_actions, continuous_action_space.
+        Arguments:
+            - root_num: the number of the current root.
+            - legal_action_list: the vector of the legal action of this root.
+            - action_space_size: the size of action space of the current env.
+            - num_of_sampled_actions: the number of sampled actions, i.e. K in the Sampled MuZero papers.
+            - continuous_action_space: whether the action space is continous in current env.
+        """
+        import lzero.mcts.ptree.ptree_sez as ptree
+        return ptree.Roots(
+                    root_num, legal_action_lis, action_space_size,
+                    num_of_sampled_actions, continuous_action_space
+                )
+
+    def search(self, roots, model, hidden_state_roots, reward_hidden_state_roots, to_play=-1):
         """
         Overview:
             Do MCTS for the roots (a batch of root nodes in parallel). Parallel in model inference.
@@ -57,7 +90,7 @@ class SampledEfficientZeroMCTSPtree(object):
 
             # preparation
             num = roots.num
-            pb_c_base, pb_c_init, discount = self._cfg.pb_c_base, self._cfg.pb_c_init, self._cfg.discount
+            pb_c_base, pb_c_init, discount_factor = self._cfg.pb_c_base, self._cfg.pb_c_init, self._cfg.discount_factor
             # the data storage of hidden states: storing the hidden states of all the ctree root nodes
             # hidden_state_roots.shape  (2, 12, 3, 3)
             hidden_state_pool = [hidden_state_roots]
@@ -94,7 +127,7 @@ class SampledEfficientZeroMCTSPtree(object):
                 # MCTS stage 1: Each simulation starts from the internal root state s0, and finishes when the
                 # simulation reaches a leaf node s_l.
                 hidden_state_index_x_lst, hidden_state_index_y_lst, last_actions, virtual_to_play = tree_sez.batch_traverse(
-                    roots, pb_c_base, pb_c_init, discount, min_max_stats_lst, results, copy.deepcopy(to_play),
+                    roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst, results, copy.deepcopy(to_play),
                     self._cfg.model.continuous_action_space
                 )
                 # obtain the search horizon for leaf nodes (not expanded)
@@ -181,7 +214,7 @@ class SampledEfficientZeroMCTSPtree(object):
 
                 # backpropagation along the search path to update the attributes
                 tree_sez.batch_backpropagate(
-                    hidden_state_index_x, discount, value_prefix_pool, value_pool, policy_logits_pool,
+                    hidden_state_index_x, discount_factor, value_prefix_pool, value_pool, policy_logits_pool,
                     min_max_stats_lst, results, is_reset_lst, virtual_to_play
                 )
 

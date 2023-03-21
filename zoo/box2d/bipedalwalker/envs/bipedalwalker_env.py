@@ -69,13 +69,10 @@ class BipedalWalkerEnv(BaseEnv):
         self._final_eval_reward = 0
         if self._save_replay_gif:
             self._frames = []
-
-        # original env: obs_shape: 24, action_shape: 4
-        # to be compatible with efficientzero
-        # shape: [W, H, C]
+        # to be compatible with LightZero model,shape: [W, H, C]
         obs = obs.reshape(24, 1, 1)
         action_mask = None
-        obs = {'observation': obs, 'action_mask': action_mask, 'to_play': None}
+        obs = {'observation': obs, 'action_mask': action_mask, 'to_play': -1}
 
         return obs
 
@@ -102,12 +99,10 @@ class BipedalWalkerEnv(BaseEnv):
             self._frames.append(self._env.render(mode='rgb_array'))
 
         obs, rew, done, info = self._env.step(action)
-        # self.render()
-        # to be compatible with muzero/efficientzero
-        # shape: [W, H, C]
+        # to be compatible with LightZero model,shape: [W, H, C]
         obs = obs.reshape(24, 1, 1)
         action_mask = None
-        obs = {'observation': obs, 'action_mask': action_mask, 'to_play': None}
+        obs = {'observation': obs, 'action_mask': action_mask, 'to_play': -1}
 
         self._final_eval_reward += rew
         if self._rew_clip:
@@ -126,7 +121,6 @@ class BipedalWalkerEnv(BaseEnv):
                 self.display_frames_as_gif(self._frames, path)
                 print(f'save episode {self._save_replay_count} in {self._replay_path_gif}!')
                 self._save_replay_count += 1
-        # obs = to_ndarray(obs).astype(np.float32)
         obs = to_ndarray(obs)
         rew = to_ndarray([rew])  # wrapped to be transferred to a array with shape (1,)
         return BaseEnvTimestep(obs, rew, done, info)

@@ -11,14 +11,17 @@ from lzero.mcts.buffer.game_buffer_efficientzero import EfficientZeroGameBuffer
 
 
 class RateLimit:
-    r"""
-    Add rate limit threshold to push function
+    """
+    Overview:
+        Add rate limit threshold to push function.
+    Interfaces:
+        __init__, __call__, push
     """
 
     def __init__(self, max_rate: int = float("inf"), window_seconds: int = 30) -> None:
         self.max_rate = max_rate
         self.window_seconds = window_seconds
-        self.buffered = []
+        self.game_block_buffered = []
 
     def __call__(self, action: str, chain: Callable, *args, **kwargs):
         if action == "push":
@@ -28,9 +31,9 @@ class RateLimit:
     def push(self, chain, data, *args, **kwargs) -> None:
         current = time.time()
         # Cut off stale records
-        self.buffered = [t for t in self.buffered if t > current - self.window_seconds]
-        if len(self.buffered) < self.max_rate:
-            self.buffered.append(current)
+        self.game_block_buffered = [t for t in self.game_block_buffered if t > current - self.window_seconds]
+        if len(self.game_block_buffered) < self.max_rate:
+            self.game_block_buffered.append(current)
             return chain(data, *args, **kwargs)
         else:
             return None
@@ -38,9 +41,11 @@ class RateLimit:
 
 def add_10() -> Callable:
     """
-    Transform data on sampling
+    Overview:
+        Transform data on sampling.
+    Interfaces:
+        sample, _subview
     """
-
     def sample(chain: Callable, size: int, replace: bool = False, *args, **kwargs):
         sampled_data = chain(size, replace, *args, **kwargs)
         return [BufferedData(data=item.data + 10, index=item.index, meta=item.meta) for item in sampled_data]
@@ -57,7 +62,7 @@ config = EasyDict(dict(
     batch_size=10,
     transition_num=20,
     priority_prob_alpha=0.5,
-    max_total_transitions=10000,
+    replay_buffer_size=10000,
 ))
 
 
@@ -66,7 +71,7 @@ def test_naive_push_sample():
     buffer = EfficientZeroGameBuffer(config)
     # fake data
     data = [[1, 1, 1] for _ in range(10)]  # (s,a,r)
-    meta = {'end_tag': True, 'gap_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
+    meta = {'done': True, 'unroll_plus_td_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
 
     # push
     for i in range(20):
@@ -74,7 +79,7 @@ def test_naive_push_sample():
     assert buffer.count() == 20
 
     # push games
-    buffer.push_games([data, data], [meta, meta])
+    buffer.push_game_blocks([data, data], [meta, meta])
     assert buffer.count() == 22
 
     # Clear
@@ -94,7 +99,7 @@ def test_update():
     buffer = EfficientZeroGameBuffer(config)
     # fake data
     data = [[1, 1, 1] for _ in range(10)]  # (s,a,r)
-    meta = {'end_tag': True, 'gap_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
+    meta = {'done': True, 'unroll_plus_td_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
 
     # push
     for i in range(20):
@@ -105,7 +110,7 @@ def test_update():
     meta_new = {'priorities': 0.999}
     buffer.update(0, data, meta_new)
     print(buffer.sample(indices=[0]))
-    assert buffer.priorities[0] == 0.999
+    assert buffer.game_pos_priorities[0] == 0.999
 
     assert buffer.update(200, data, meta_new) is False
 
@@ -115,7 +120,7 @@ def test_rate_limit_push_sample():
     buffer = EfficientZeroGameBuffer(config).use(RateLimit(max_rate=5))
     # fake data
     data = [[1, 1, 1] for i in range(10)]  # (s,a,r)
-    meta = {'end_tag': True, 'gap_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
+    meta = {'done': True, 'unroll_plus_td_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
 
     # push
     for i in range(20):
@@ -132,17 +137,17 @@ def test_prepare_batch_context():
 
     # fake data
     data_1 = [[1, 1, 1] for i in range(10)]  # (s,a,r)
-    meta_1 = {'end_tag': True, 'gap_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
+    meta_1 = {'done': True, 'unroll_plus_td_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
 
     data_2 = [[1, 1, 1] for i in range(10, 20)]  # (s,a,r)
-    meta_2 = {'end_tag': True, 'gap_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
+    meta_2 = {'done': True, 'unroll_plus_td_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
 
     # push
     buffer.push(data_1, meta_1)
     buffer.push(data_2, meta_2)
 
     context = buffer.prepare_batch_context(batch_size=2, beta=0.2)
-    # context = (game_lst, game_pos_lst, indices_lst, weights_lst, make_time)
+    # context = (game_lst, game_pos_lst, indices_lst, weights, make_time)
     # print(context)
 
 
@@ -152,7 +157,7 @@ def test_buffer_view():
 
     # fake data
     data = [[1, 1, 1] for _ in range(10)]  # (s,a,r)
-    meta = {'end_tag': True, 'gap_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
+    meta = {'done': True, 'unroll_plus_td_steps': 5, 'priorities': np.array([0.9 for i in range(10)])}
 
     # push
     buf1.push(data, meta)

@@ -15,7 +15,7 @@ evaluator_env_num = 1
 num_simulations = 25
 # update_per_collect determines the number of training steps after each collection of a batch of data.
 # For different env, we have different episode_length,
-# we usually set update_per_collect = collector_env_num * episode_length * reuse_factor
+# we usually set update_per_collect = collector_env_num * episode_length / batch_size * reuse_factor
 update_per_collect = 40
 batch_size = 256
 max_env_step = int(1e5)
@@ -48,7 +48,7 @@ tictactoe_muzero_config = dict(
             # default init config in MuZeroModel class for details.
             # ==============================================================
             # NOTE: the key difference setting between image-input and vector input.
-            image_channel=3,
+            image_channel=1,
             frame_stack_num=1,
             downsample=False,
             # the stacked obs shape -> the transformed obs shape:
@@ -59,7 +59,7 @@ tictactoe_muzero_config = dict(
             action_space_size=9,
             # whether to use discrete support to represent categorical distribution for value, reward.
             categorical_distribution=True,
-            representation_model_type='conv_res_blocks',  # options={'conv_res_blocks', 'identity'}
+            representation_network_type='conv_res_blocks',  # options={'conv_res_blocks', 'identity'}
             ## small size model
             num_res_blocks=1,
             num_channels=16,
@@ -82,10 +82,10 @@ tictactoe_muzero_config = dict(
         learn=dict(
             update_per_collect=update_per_collect,
             batch_size=batch_size,
-            # lr_manually=True,
+            # lr_piecewise_constant_decay=True,
             # optim_type='SGD',
             # learning_rate=0.2,  # init lr for manually decay schedule
-            lr_manually=False,
+            lr_piecewise_constant_decay=False,
             optim_type='Adam',
             learning_rate=0.001,  # lr for Adam optimizer
             # Frequency of target network update.
@@ -101,7 +101,7 @@ tictactoe_muzero_config = dict(
         # command_mode config
         other=dict(
             # NOTE: the replay_buffer_size is ineffective,
-            # we specify it using ``max_total_transitions`` in the following game config
+            # we specify it using ``replay_buffer_size`` in the following game config
             replay_buffer=dict(type='game_buffer_muzero')
         ),
         # ==============================================================
@@ -113,7 +113,7 @@ tictactoe_muzero_config = dict(
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
         env_type='board_games',
-        game_history_length=5,
+        game_block_length=5,
 
         ## observation
         # NOTE: the key difference setting between image-input and vector input
@@ -123,7 +123,7 @@ tictactoe_muzero_config = dict(
         use_augmentation=False,
 
         ## reward
-        clip_reward=True,
+        clip_rewards=True,
 
         ## learn
         num_simulations=num_simulations,
@@ -134,13 +134,16 @@ tictactoe_muzero_config = dict(
         reward_loss_weight=1,
         value_loss_weight=0.25,
         policy_loss_weight=1,
-        # ``fixed_temperature_value`` is effective only when ``auto_temperature=False``.
-        auto_temperature=False,
+        # ``fixed_temperature_value`` is effective only when ``manual_temperature_decay=False``.        manual_temperature_decay=False,
         fixed_temperature_value=1,
         # the size/capacity of replay_buffer
-        max_total_transitions=int(3e3),
-        # ``max_training_steps`` is only used for adjusting temperature manually.
-        max_training_steps=int(1e5),
+        replay_buffer_size=int(1e6),
+        # ``threshold_training_steps_for_final_lr`` is only used for adjusting lr manually.
+        threshold_training_steps_for_final_lr=int(
+            threshold_env_steps_for_final_lr / collector_env_num / average_episode_length_when_converge * update_per_collect),
+        # ``threshold_training_steps_for_final_temperature`` is only used for adjusting temperature manually.
+        threshold_training_steps_for_final_temperature=int(
+            threshold_env_steps_for_final_temperature / collector_env_num / average_episode_length_when_converge * update_per_collect),
 
         ## reanalyze
         reanalyze_ratio=0.3,
@@ -180,7 +183,7 @@ tictactoe_muzero_create_config = EasyDict(tictactoe_muzero_create_config)
 create_config = tictactoe_muzero_create_config
 
 if __name__ == "__main__":
-    from lzero.entry import serial_pipeline_muzero_eval
+    from lzero.entry import eval_muzero
     import numpy as np
 
     test_seeds = 5
@@ -189,7 +192,7 @@ if __name__ == "__main__":
     reward_all_seeds = []
     reward_mean_all_seeds = []
     for seed in range(test_seeds):
-        reward_mean, reward_lst = serial_pipeline_muzero_eval(
+        reward_mean, reward_lst = eval_muzero(
             [main_config, create_config], seed=seed, test_episodes=test_episodes_each_seed, max_env_step=int(1e5)
         )
         reward_mean_all_seeds.append(reward_mean)

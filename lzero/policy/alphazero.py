@@ -1,68 +1,81 @@
 from collections import namedtuple
 from typing import List, Dict, Any, Tuple, Union
 
+import numpy as np
 import torch.distributions
 import torch.nn.functional as F
 import torch.optim as optim
-
 from ding.model import model_wrap
 from ding.policy.base_policy import Policy
-from lzero.mcts.ptree.ptree_az import MCTS
 from ding.torch_utils import to_device
 from ding.utils import POLICY_REGISTRY
 from ding.utils.data import default_collate
-from ding.rl_utils import get_nstep_return_data, get_train_sample
+
+from lzero.mcts.ptree.ptree_az import MCTS
 
 
 @POLICY_REGISTRY.register('alphazero')
 class AlphaZeroPolicy(Policy):
     """
     Overview:
-        The policy class for AlphaZero
+        The policy class for AlphaZero.
     """
     config = dict(
-        # (string) RL policy register name (refer to function "register_policy").
-        type='alphazero',
         # (bool) Whether to use cuda for network.
         cuda=False,
         # (bool) whether use on-policy training pipeline(behaviour policy and training policy are the same)
-        on_policy=False,  # for a2c strictly on policy algorithm this line should not be seen by users
+        on_policy=False,
         priority=False,
         model=dict(
-            categorical_distribution=False,
-            representation_model_type='conv_res_blocks',
             observation_shape=(3, 6, 6),
-            action_space_size=int(1 * 6 * 6),
-            downsample=False,
-            reward_support_size=1,
-            value_support_size=1,
             num_res_blocks=1,
             num_channels=32,
-            value_head_channels=16,
-            policy_head_channels=16,
-            fc_value_layers=[32],
-            fc_policy_layers=[32],
-            batch_norm_momentum=0.1,
-            last_linear_layer_init_zero=True,
-            state_norm=False,
         ),
         # learn_mode config
         learn=dict(
-            # (bool) Whether to use multi gpu
+            # (bool) Whether to use multi gpu.
             multi_gpu=False,
-            batch_size=64,
-            learning_rate=0.001,
+            batch_size=256,
+            lr_piecewise_constant_decay=True,
+            optim_type='SGD',
+            learning_rate=0.2,  # init lr for manually decay schedule
+            # optim_type='Adam',
+            # learning_rate=0.001,  # lr for Adam optimizer
             weight_decay=0.0001,
-            grad_norm=0.5,
+            grad_clip_value=10,
             value_weight=1.0,
-            optim_type='Adam',
-            learner=dict(
-                hook=dict(
-                    load_ckpt_before_run='',
-                    log_show_after_iter=100,
-                    save_ckpt_after_iter=10000,
-                    save_ckpt_after_run=True,
-                )
+        ),
+        collector_env_num=8,
+        evaluator_env_num=3,
+        # ``threshold_training_steps_for_final_lr`` is only used for adjusting lr manually.
+        # threshold_training_steps_for_final_lr=int(
+        #     threshold_env_steps_for_final_lr / collector_env_num / average_episode_length_when_converge * update_per_collect),
+        threshold_training_steps_for_final_lr=int(5e5),
+        # lr: 0.2 -> 0.02 -> 0.002
+
+        # ``threshold_training_steps_for_final_temperature`` is only used for adjusting temperature manually.
+        # threshold_training_steps_for_final_temperature=int(
+        #     threshold_env_steps_for_final_temperature / collector_env_num / average_episode_length_when_converge * update_per_collect),
+        threshold_training_steps_for_final_temperature=int(1e5),
+        # temperature: 1 -> 0.5 -> 0.25
+        manual_temperature_decay=True,
+        # ``fixed_temperature_value`` is effective only when manual_temperature_decay=False
+        fixed_temperature_value=0.25,
+        collect=dict(
+            unroll_len=1,
+            n_episode=8,
+            collector=dict(augmentation=True, ),
+            mcts=dict(num_simulations=50)
+        ),
+        eval=dict(evaluator=dict(
+            eval_freq=int(2e3),
+        ),
+            mcts=dict(num_simulations=50)
+        ),
+        other=dict(
+            replay_buffer=dict(
+                replay_buffer_size=int(1e6),
+                save_episode=False,
             )
         ),
     )
@@ -87,16 +100,18 @@ class AlphaZeroPolicy(Policy):
                 lr=self._cfg.learn.learning_rate,
                 momentum=self._cfg.learn.momentum,
                 weight_decay=self._cfg.learn.weight_decay,
-                # grad_clip_type=self._cfg.learn.grad_clip_type,
-                # clip_value=self._cfg.learn.grad_clip_value,
             )
         elif self._cfg.learn.optim_type == 'Adam':
             self._optimizer = optim.Adam(
                 self._model.parameters(), lr=self._cfg.learn.learning_rate, weight_decay=self._cfg.learn.weight_decay
             )
 
-        # Optimizer
-        self._grad_norm = self._cfg.learn.grad_norm
+        if self._cfg.learn.lr_piecewise_constant_decay:
+            from torch.optim.lr_scheduler import LambdaLR
+            max_step = self._cfg.threshold_training_steps_for_final_lr
+            # NOTE: the 1, 0.1, 0.01 is the decay rate, not the lr.
+            lr_lambda = lambda step: 1 if step < max_step * 0.5 else (0.1 if step < max_step else 0.01)
+            self.lr_scheduler = LambdaLR(self._optimizer, lr_lambda=lr_lambda)
 
         # Algorithm config
         self._value_weight = self._cfg.learn.value_weight
@@ -104,6 +119,7 @@ class AlphaZeroPolicy(Policy):
         # Main and target models
         self._learn_model = model_wrap(self._model, wrapper_name='base')
         self._learn_model.reset()
+        self.collect_mcts_temperature = 1
 
     def _forward_learn(self, inputs: dict) -> Dict[str, Any]:
         inputs = default_collate(inputs)
@@ -140,11 +156,11 @@ class AlphaZeroPolicy(Policy):
         self._optimizer.zero_grad()
         total_loss.backward()
 
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            list(self._model.parameters()),
-            max_norm=self._grad_norm,
-        )
+        total_grad_norm_before_clip = torch.nn.utils.clip_grad_norm_(list(self._model.parameters()),
+                                                                     max_norm=self._cfg.learn.grad_clip_value, )
         self._optimizer.step()
+        if self._cfg.learn.lr_piecewise_constant_decay is True:
+            self.lr_scheduler.step()
 
         # =============
         # after update
@@ -155,7 +171,8 @@ class AlphaZeroPolicy(Policy):
             'policy_loss': policy_loss,
             'value_loss': value_loss,
             'entropy_loss': entropy_loss,
-            'grad_norm': grad_norm,
+            'total_grad_norm_before_clip': total_grad_norm_before_clip,
+            'collect_mcts_temperature': self.collect_mcts_temperature,
         }
 
     def _init_collect(self) -> None:
@@ -168,17 +185,20 @@ class AlphaZeroPolicy(Policy):
         self._collect_mcts = MCTS(self._cfg.collect.mcts)
         self._collect_model = model_wrap(self._model, wrapper_name='base')
         self._collect_model.reset()
+        self.collect_mcts_temperature = 1
 
     @torch.no_grad()
-    def _forward_collect(self, envs, obs):
+    def _forward_collect(self, envs, obs, temperature: np.ndarray = 1):
         r"""
         Overview:
             Forward function for collect mode
         Arguments:
             - data (:obj:`dict`): Dict type data, including at least ['obs'].
+            - temperature: shape: (N, ), where N is the number of collect_env.
         Returns:
             - data (:obj:`dict`): The collected data
         """
+        self.collect_mcts_temperature = temperature
         ready_env_id = list(envs.keys())
         init_state = {env_id: obs[env_id]['board'] for env_id in ready_env_id}
         start_player_index = {env_id: obs[env_id]['current_player_index'] for env_id in ready_env_id}
@@ -192,38 +212,14 @@ class AlphaZeroPolicy(Policy):
                 init_state=init_state[env_id],
             )
             action, mcts_probs = self._collect_mcts.get_next_action(
-                envs[env_id], policy_forward_fn=self._policy_value_fn, temperature=1.0, sample=True
+                envs[env_id], policy_forward_fn=self._policy_value_fn, temperature=self.collect_mcts_temperature,
+                sample=True
             )
             output[env_id] = {
                 'action': action,
                 'probs': mcts_probs,
             }
         return output
-
-    def _get_train_sample(self, data: list) -> Union[None, List[Any]]:
-        data = get_nstep_return_data(data, self._nstep, gamma=self._gamma)
-        return get_train_sample(data, self._unroll_len)
-
-    def _process_transition(self, obs: Any, model_output: dict, timestep: namedtuple) -> dict:
-        r"""
-        Overview:
-            Generate dict type transition data from inputs.
-        Arguments:
-            - obs (:obj:`Any`): Env observation
-            - model_output (:obj:`dict`): Output of collect model, including at least ['action']
-            - timestep (:obj:`namedtuple`): Output after env step, including at least ['obs', 'reward', 'done'] \
-                (here 'obs' indicates obs after env step).
-        Returns:
-            - transition (:obj:`dict`): Dict type transition data.
-        """
-        return {
-            'obs': obs,
-            'next_obs': timestep.obs,
-            'action': model_output['action'],
-            'probs': model_output['probs'],
-            'reward': timestep.reward,
-            'done': timestep.done,
-        }
 
     def _init_eval(self) -> None:
         r"""
@@ -274,19 +270,40 @@ class AlphaZeroPolicy(Policy):
                 action and the score of the env state
         """
         legal_actions = env.legal_actions
-        current_state = env.current_state()
-        current_state = torch.from_numpy(current_state).to(device=self._device, dtype=torch.float).unsqueeze(0)
-        # TODO
-        current_state = current_state.reshape(-1, 3, self._cfg.board_size, self._cfg.board_size)
+        current_state, current_state_scale = env.current_state()
+        current_state_scale = torch.from_numpy(current_state_scale).to(device=self._device,
+                                                                       dtype=torch.float).unsqueeze(0)
         with torch.no_grad():
-            action_probs, value = self._policy_model.compute_prob_value(current_state)
+            action_probs, value = self._policy_model.compute_prob_value(current_state_scale)
         action_probs_dict = dict(zip(legal_actions, action_probs.squeeze(0)[legal_actions].detach().cpu().numpy()))
-        value = value.item()
-        if list(action_probs_dict.keys()) != legal_actions:
-            print('debug')
-        return action_probs_dict, value
+        return action_probs_dict, value.item()
 
     def _monitor_vars_learn(self) -> List[str]:
         return super()._monitor_vars_learn() + [
-            'cur_lr', 'total_loss', 'policy_loss', 'value_loss', 'entropy_loss', 'grad_norm'
+            'cur_lr', 'total_loss', 'policy_loss', 'value_loss', 'entropy_loss', 'total_grad_norm_before_clip', 'collect_mcts_temperature'
         ]
+
+    def _process_transition(self, obs: Any, model_output: dict, timestep: namedtuple) -> dict:
+        r"""
+        Overview:
+            Generate dict type transition data from inputs.
+        Arguments:
+            - obs (:obj:`Any`): Env observation
+            - model_output (:obj:`dict`): Output of collect model, including at least ['action']
+            - timestep (:obj:`namedtuple`): Output after env step, including at least ['obs', 'reward', 'done'] \
+                (here 'obs' indicates obs after env step).
+        Returns:
+            - transition (:obj:`dict`): Dict type transition data.
+        """
+        return {
+            'obs': obs,
+            'next_obs': timestep.obs,
+            'action': model_output['action'],
+            'probs': model_output['probs'],
+            'reward': timestep.reward,
+            'done': timestep.done,
+        }
+
+    def _get_train_sample(self, data: list) -> Union[None, List[Any]]:
+        # be compatible with DI-engine base_policy
+        pass

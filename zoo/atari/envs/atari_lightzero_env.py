@@ -11,31 +11,34 @@ import numpy as np
 from ding.envs import BaseEnv, BaseEnvTimestep
 from ding.torch_utils import to_ndarray
 from ding.utils import ENV_REGISTRY
-
-from zoo.atari.envs.atari_wrappers import wrap_lightzero, wrap_lightzero_dqn_expert_data
 from easydict import EasyDict
+
+from zoo.atari.envs.atari_wrappers import wrap_lightzero
 
 
 @ENV_REGISTRY.register('atari_lightzero')
 class AtariLightZeroEnv(BaseEnv):
-
     config = dict(
         collector_env_num=8,
         evaluator_env_num=3,
         n_evaluator_episode=3,
         env_name='PongNoFrameskip-v4',
-        obs_shape=(3, 96, 96),
-        render_mode_human=False,
+        obs_shape=(4, 96, 96),
         collect_max_episode_steps=int(1.08e5),
         eval_max_episode_steps=int(1.08e5),
         max_episode_steps=int(1.08e5),
+        gray_scale=True,
         frame_skip=4,
         episode_life=True,
-        gray_scale=False,
+        clip_rewards=True,
+        channel_last=True,
+        render_mode_human=False,
+        scale=True,
+        warp_frame=True,
+        save_video=False,
         # trade memory for speed
         cvt_string=False,
         game_wrapper=True,
-        dqn_expert_data=False,
         manager=dict(shared_memory=False, ),
         stop_value=int(1e6),
     )
@@ -45,13 +48,18 @@ class AtariLightZeroEnv(BaseEnv):
         cfg = EasyDict(copy.deepcopy(cls.config))
         cfg.cfg_type = cls.__name__ + 'Dict'
         return cfg
-    
+
     def __init__(self, cfg=None):
         self.cfg = cfg
         self._init_flag = False
+        self.channel_last = cfg.channel_last
+        self.clip_rewards = cfg.clip_rewards
+        self.episode_life = cfg.episode_life
 
     def _make_env(self):
-        return wrap_lightzero(self.cfg)
+        return wrap_lightzero(self.cfg,
+                              episode_life=self.cfg.episode_life,
+                              clip_rewards=self.cfg.clip_rewards)
 
     def reset(self):
         if not self._init_flag:
@@ -59,7 +67,7 @@ class AtariLightZeroEnv(BaseEnv):
             self._observation_space = self._env.env.observation_space
             self._action_space = self._env.env.action_space
             self._reward_space = gym.spaces.Box(
-                low=self._env.env.reward_range[0], high=self._env.env.reward_range[1], shape=(1, ), dtype=np.float32
+                low=self._env.env.reward_range[0], high=self._env.env.reward_range[1], shape=(1,), dtype=np.float32
             )
 
             self._init_flag = True
@@ -74,7 +82,7 @@ class AtariLightZeroEnv(BaseEnv):
         self._final_eval_reward = 0.
         self.has_reset = True
         obs = self.observe()
-        # obs.shape: 96,96,3
+        # obs.shape: 96,96,1
         return obs
 
     def observe(self):
@@ -83,8 +91,14 @@ class AtariLightZeroEnv(BaseEnv):
             add action_mask to obs to adapt with MCTS alg..
         """
         observation = self.obs
+
+        if not self.channel_last:
+            # move the channel dim to the fist axis
+            # (96, 96, 3) -> (3, 96, 96)
+            observation = np.transpose(observation, (2, 0, 1))
+
         action_mask = np.ones(self._action_space.n, 'int8')
-        return {'observation': observation, 'action_mask': action_mask, 'to_play': None}
+        return {'observation': observation, 'action_mask': action_mask, 'to_play': -1}
 
     def step(self, action):
         obs, reward, done, info = self._env.step(action)
@@ -155,7 +169,7 @@ class AtariLightZeroEnv(BaseEnv):
         return self._reward_space
 
     def __repr__(self) -> str:
-        return "DI-engine Atari MuZero Env({})".format(self.cfg.env_name)
+        return "LightZero Atari Env({})".format(self.cfg.env_name)
 
     @staticmethod
     def create_collector_env_cfg(cfg: dict) -> List[dict]:
@@ -169,4 +183,6 @@ class AtariLightZeroEnv(BaseEnv):
         evaluator_env_num = cfg.pop('evaluator_env_num')
         cfg = copy.deepcopy(cfg)
         cfg.max_episode_steps = cfg.eval_max_episode_steps
+        cfg.episode_life = False
+        cfg.clip_rewards = False
         return [cfg for _ in range(evaluator_env_num)]

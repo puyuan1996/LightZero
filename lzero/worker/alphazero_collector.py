@@ -1,14 +1,13 @@
-import os
 from collections import namedtuple
-from ding.envs import BaseEnv
-from ding.worker.collector.base_serial_collector import ISerialCollector, CachePool, TrajBuffer, INF, to_tensor_transitions
 from typing import Optional, Any, List
-from easydict import EasyDict
+
 import numpy as np
 from ding.envs import BaseEnvManager
-from ding.utils.data import default_decollate
-from ding.utils import build_logger, EasyTimer, SERIAL_COLLECTOR_REGISTRY, ENV_REGISTRY
-from ding.torch_utils import to_tensor, to_ndarray
+from ding.torch_utils import to_ndarray
+from ding.utils import build_logger, EasyTimer, SERIAL_COLLECTOR_REGISTRY
+from ding.worker.collector.base_serial_collector import ISerialCollector, CachePool, TrajBuffer, INF, \
+    to_tensor_transitions
+from easydict import EasyDict
 
 
 @SERIAL_COLLECTOR_REGISTRY.register('episode_alphazero')
@@ -25,7 +24,6 @@ class AlphaZeroCollector(ISerialCollector):
         deepcopy_obs=False,
         transform_obs=False,
         collect_print_freq=100,
-        get_train_sample=False,
         reward_shaping=True,
         augmentation=False
     )
@@ -41,12 +39,24 @@ class AlphaZeroCollector(ISerialCollector):
         replay_buffer: 'replay_buffer' = None,  # noqa
         env_config=None,
     ):
+        """
+            Overview:
+                Init the AlphaZero collector according to input arguments.
+            Arguments:
+                - cfg (:obj:`EasyDict`): Config.
+                - env (:obj:`BaseEnvManager`): The env for the collection, the BaseEnvManager object or \
+                    its derivatives are supported.
+                - policy (:obj:`Policy`): The policy to be collected.
+                - tb_logger (:obj:`SummaryWriter`): Logger, defaultly set as 'SummaryWriter' for model summary.
+                - instance_name (:obj:`Optional[str]`): Name of this instance.
+                - exp_name (:obj:`str`): Experiment name, which is used to indicate output directory.
+                - replay_buffer (:obj:`replay_buffer`): the buffer
+                - env_config: Config of environment
+            """
         self._exp_name = exp_name
         self._instance_name = instance_name
         self._collect_print_freq = cfg.collect_print_freq
         self._deepcopy_obs = cfg.deepcopy_obs
-        self._transform_obs = cfg.transform_obs
-        self._use_augmentation = cfg.augmentation
         self._cfg = cfg
         self._timer = EasyTimer()
         self._end_flag = False
@@ -154,6 +164,16 @@ class AlphaZeroCollector(ISerialCollector):
                 n_episode: Optional[int] = None,
                 train_iter: int = 0,
                 policy_kwargs: Optional[dict] = None) -> List[Any]:
+        """
+        Overview:
+            Collect `n_episode` data with policy_kwargs, which is already trained `train_iter` iterations
+        Arguments:
+            - n_episode (:obj:`int`): the number of collecting data episode
+            - train_iter (:obj:`int`): the number of training iteration
+            - policy_kwargs (:obj:`dict`): the keyword args for policy forward
+        Returns:
+            - return_data (:obj:`List`): A list containing collected episodes.
+        """
         if n_episode is None:
             if self._default_n_episode is None:
                 raise RuntimeError("Please specify collect n_episode")
@@ -162,6 +182,7 @@ class AlphaZeroCollector(ISerialCollector):
         assert n_episode >= self._env_num, "Please make sure n_episode >= env_num{}/{}".format(n_episode, self._env_num)
         if policy_kwargs is None:
             policy_kwargs = {}
+        temperature = policy_kwargs['temperature']
         collected_episode = 0
         return_data = []
         ready_env_id = set()
@@ -174,25 +195,27 @@ class AlphaZeroCollector(ISerialCollector):
                 new_available_env_id = set(obs.keys()).difference(ready_env_id)
                 ready_env_id = ready_env_id.union(set(list(new_available_env_id)[:remain_episode]))
                 remain_episode -= min(len(new_available_env_id), remain_episode)
-                # for env_id in ready_env_id:
-                #     print('[collect] env_id = {}'.format(env_id))
-                #     print('board = \n {}'.format(self._env._envs[env_id].board))
                 obs_ = {env_id: obs[env_id] for env_id in ready_env_id}
                 # Policy forward.
                 self._obs_pool.update(obs_)
                 simulation_envs = {}
                 for env_id in ready_env_id:
-                    simulation_envs[env_id] = ENV_REGISTRY.build(self._cfg.env.type, self._env_config)
-                policy_output = self._policy.forward(simulation_envs, obs_)
+                    # create the new simulation env instances from the current collect env using the same env_config.
+                    simulation_envs[env_id] = self._env._env_fn[env_id]()
+                # ==============================================================
+                # policy forward
+                # ==============================================================
+                policy_output = self._policy.forward(simulation_envs, obs_, temperature)
                 self._policy_output_pool.update(policy_output)
                 # Interact with env.
                 actions = {env_id: output['action'] for env_id, output in policy_output.items()}
                 actions = to_ndarray(actions)
+                # ==============================================================
+                # Interact with env.
+                # ==============================================================
                 timesteps = self._env.step(actions)
 
-            # TODO(nyz) this duration may be inaccurate in async env
             interaction_duration = self._timer.value / len(timesteps)
-            # TODO(nyz) vectorize this for loop
             for env_id, timestep in timesteps.items():
                 with self._timer:
                     if timestep.info.get('abnormal', False):
@@ -215,27 +238,17 @@ class AlphaZeroCollector(ISerialCollector):
                     if timestep.done:
                         transitions = to_tensor_transitions(self._traj_buffer[env_id])
                         if self._cfg.reward_shaping:
-                            transitions = self.reward_shaping(transitions)
-                        if self._cfg.get_train_sample:
-                            train_sample = self._policy.get_train_sample(transitions)
-                            return_data.extend(train_sample)
-                        else:
-                            return_data.append(transitions)
+                            transitions = self.reward_shaping(transitions, timestep.info['final_eval_reward'])
+                        return_data.append(transitions)
                         self._traj_buffer[env_id].clear()
 
                 self._env_info[env_id]['time'] += self._timer.value + interaction_duration
                 if timestep.done:
                     self._total_episode_count += 1
-                    if timestep.obs['to_play'] == -1:  # one player mode
-                        reward = timestep.info['final_eval_reward']
-                    else:
-                        if timestep.obs['to_play'] == 1:  # two player mode
-                            reward = -timestep.info['final_eval_reward']
-                        else:
-                            reward = timestep.info['final_eval_reward']
+                    # the final_eval_reward is calculated from Player 1's perspective
                     reward = timestep.info['final_eval_reward']
                     info = {
-                        'reward': reward,  #only means player1 reward
+                        'reward': reward,  # only means player1 reward
                         'time': self._env_info[env_id]['time'],
                         'step': self._env_info[env_id]['step'],
                     }
@@ -322,12 +335,24 @@ class AlphaZeroCollector(ISerialCollector):
                     continue
                 self._tb_logger.add_scalar('{}_step/'.format(self._instance_name) + k, v, self._total_envstep_count)
 
-    def reward_shaping(self, transitions):
+    def reward_shaping(self, transitions, final_eval_reward):
+        """
+        Overview:
+            Shape the reward according to the player.
+        Return:
+            - transitions: data transitions.
+        """
         reward = transitions[-1]['reward']
         to_play = transitions[-1]['obs']['to_play']
         for t in transitions:
-            if t['obs']['to_play'] == to_play:
-                t['reward'] = int(reward)
+            if t['obs']['to_play'] == -1:
+                # play_with_bot_mode
+                # the final_eval_reward is calculated from Player 1's perspective
+                t['reward'] = final_eval_reward
             else:
-                t['reward'] = int(-reward)
+                # self_play_mode
+                if t['obs']['to_play'] == to_play:
+                    t['reward'] = int(reward)
+                else:
+                    t['reward'] = int(-reward)
         return transitions

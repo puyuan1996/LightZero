@@ -9,10 +9,12 @@ class TestTicTacToeEnv:
     def test_self_play_mode(self):
         cfg = EasyDict(
             battle_mode='self_play_mode',
+            channel_last=True,
+            scale=True,
             agent_vs_human=False,
             prob_random_agent=0,
             prob_expert_agent=0,
-            expert_action_type='alpha_beta_pruning'
+            bot_action_type='alpha_beta_pruning'
         )
         env = TicTacToeEnv(cfg)
         env.reset()
@@ -20,9 +22,9 @@ class TestTicTacToeEnv:
         env.render()
         while True:
             """player 1"""
-            action = env.human_to_action()
-            # action = env.random_action()
-            # action = env.expert_action()
+            # action = env.human_to_action()
+            action = env.random_action()
+            # action = env.bot_action()
             print('player 1: ' + env.action_to_string(action))
             obs, reward, done, info = env.step(action)
             env.render()
@@ -33,7 +35,7 @@ class TestTicTacToeEnv:
                     print('draw')
                 break
             """player 2"""
-            action = env.expert_action()
+            action = env.bot_action()
             print('player 2 (computer player): ' + env.action_to_string(action))
             obs, reward, done, info = env.step(action)
             env.render()
@@ -47,10 +49,14 @@ class TestTicTacToeEnv:
     def test_play_with_bot_mode(self):
         cfg = EasyDict(
             battle_mode='play_with_bot_mode',
+            channel_last=True,
+            scale=True,
+            # channel_last=False,
+            # scale=False,
             agent_vs_human=False,
             prob_random_agent=0,
             prob_expert_agent=0,
-            expert_action_type='v0'
+            bot_action_type='v0'
         )
         env = TicTacToeEnv(cfg)
         env.reset()
@@ -59,7 +65,8 @@ class TestTicTacToeEnv:
         while True:
             """player 1"""
             # action = env.human_to_action()
-            action = env.random_action()
+            # action = env.random_action()
+            action = env.legal_actions[-1]
             print('player 1: ' + env.action_to_string(action))
             obs, reward, done, info = env.step(action)
             # reward is in the perspective of player1
@@ -75,4 +82,4 @@ class TestTicTacToeEnv:
 
 
 test = TestTicTacToeEnv()
-test.test_self_play_mode()
+test.test_play_with_bot_mode()

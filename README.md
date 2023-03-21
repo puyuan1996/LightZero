@@ -21,6 +21,7 @@ Our implementation is mainly based on [DI-engine](https://github.com/opendilab/D
 - [Outline](#outline)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Benchmark](#benchmark)
 - [Awesome-MCTS Notes](#awesome-mcts-notes)
   - [&#8627; Algo. Overview](#algo-overview)
   - [&#8627; Paper Notes](#paper-notes)
@@ -50,7 +51,7 @@ Train a MuZero agent to play [Pong](https://gymnasium.farama.org/environments/at
 
 ```bash
 cd LightZero
-python3 -u zoo/atari/config/pong_muzero_config.py
+python3 -u zoo/atari/config/atari_muzero_config.py
 ```
 
 
@@ -58,16 +59,50 @@ Train a MuZero agent to play [TicTacToe](https://en.wikipedia.org/wiki/Tic-tac-t
 
 ```bash
 cd LightZero
-python3 -u zoo/board_games/tictactoe/config/tictactoe_muzero_vs-bot_config.py
+python3 -u zoo/board_games/tictactoe/config/tictactoe_muzero_bot-mode_config.py
 ```
+
+## Benchmark
+
+<details closed>
+<summary>(Click to Expand)</summary>
+
+Below are the benchmark results of [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py), [MuZero w/ SSL](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) , [EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/efficientzero.py) and [Sampled EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/sampled_efficientzero.py) on three discrete action space games in [Atari](https://github.com/opendilab/LightZero/blob/main/zoo/atari/envs/atari_lightzero_env.py).
+
+<p align="center">
+  <img src="assets/benchmark/main/pong_main.png" alt="Image Description 1" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/qbert_main.png" alt="Image Description 2" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/mspacman_main.png" alt="Image Description 3" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/mspacman_sez_K.png" alt="Image Description 4" width="23%" height="auto" style="margin: 0 1%;">
+</p>
+
+
+Below are the benchmark results of [Sampled EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/sampled_efficientzero.py) with ``Factored/Gaussian`` policy representation on two continuous action space games: [Pendulum-v1](https://github.com/opendilab/LightZero/blob/main/zoo/classic_control/pendulum/envs/pendulum_lightzero_env.py), [LunarLanderContinuous-v2](https://github.com/opendilab/LightZero/blob/main/zoo/box2d/lunarlander/envs/lunarlander_env.py).
+
+<p align="center">
+  <img src="assets/benchmark/main/pendulum_main.png" alt="Image Description 1" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/pendulum_sez_K.png" alt="Image Description 2" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/lunarlander_main.png" alt="Image Description 3" width="30%" height="auto" style="margin: 0 1%;">
+</p>
+
+Below are the benchmark results of [AlphaZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/alphazero.py) and [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) on two board_games: [TicTacToe](https://github.com/opendilab/LightZero/blob/main/zoo/board_games/tictactoe/envs/tictactoe_env.py), [Gomoku](https://github.com/opendilab/LightZero/blob/main/zoo/board_games/gomoku/envs/gomoku_env.py).
+
+<p align="center">
+  <img src="assets/benchmark/main/tictactoe_main.png" alt="Image Description 1" width="45%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/gomoku_main.png" alt="Image Description 2" width="45%" height="auto" style="margin: 0 1%;">
+</p>
+
+</details>
+
+
 ## Awesome-MCTS Notes
 
 ### Algo. Overview
 
 The following are the overview MCTS principle diagrams of the above algorithms:
 
-<details open>
-<summary>(Click to Collapse)</summary>
+<details closed>
+<summary>(Click to Expand)</summary>
 
 ![mcts](assets/algo_overview/mcts.png)
 
@@ -86,8 +121,8 @@ The following are the overview MCTS principle diagrams of the above algorithms:
 ### Paper Notes
 The following are the detailed paper notes of the above algorithms:
 
-<details open>
-<summary>(Click to Collapse)</summary>
+<details closed>
+<summary>(Click to Expand)</summary>
 
 ![alphazero](assets/paper_notes/alphazero.pdf)
 
@@ -97,28 +132,29 @@ The following are the detailed paper notes of the above algorithms:
 
 ![sampled muzero](assets/paper_notes/sampled_muzero.pdf)
 
-![gumbel muzero](assets/paper_notes/gumbel_muzero.pdf)
+[comment]: <> (![gumbel muzero]&#40;assets/paper_notes/gumbel_muzero.pdf&#41;)
 
 </details>
 
 
-## Awesome-MCTS papers
+## Awesome-MCTS Papers
 
 Here is a collection of research papers about **Monte Carlo Tree Search**.
 [This Section](#awesome-msts-papers) will be continuously updated to track the frontier of MCTS. 
 
 ### Key Papers
 
-<details open>
-<summary>(Click to Collapse)</summary>
+<details closed>
+<summary>(Click to Expand)</summary>
 
 #### LightZero Implemented series
 
 - [2018 _Science_ AlphaZero: A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play](https://www.science.org/doi/10.1126/science.aar6404)
-- [2019 MuZero](https://arxiv.org/abs/1911.08265)
-- [2021 EfficientZero](https://arxiv.org/abs/2111.00210)
-- [2021 Sampled MuZero](https://arxiv.org/abs/2104.06303)
-- [2022 Gumbel MuZero](https://openreview.net/pdf?id=bERaNdoegnO)
+- [2019 MuZero: Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model](https://arxiv.org/abs/1911.08265)
+- [2021 EfficientZero: Mastering Atari Games with Limited Data](https://arxiv.org/abs/2111.00210)
+- [2021 Sampled MuZero: Learning and Planning in Complex Action Spaces](https://arxiv.org/abs/2104.06303)
+
+[comment]: <> (- [2022 Gumbel MuZero: Policy Improoveemenet by Planning with Gumbel]&#40;https://openreview.net/pdf?id=bERaNdoegnO&#41;)
 
 #### AlphaGo series
 
@@ -148,8 +184,8 @@ Here is a collection of research papers about **Monte Carlo Tree Search**.
 
 ### Other Papers
 
-<details open>
-<summary>(Click to Collapse)</summary>
+<details closed>
+<summary>(Click to Expand)</summary>
 
 #### ICML
 - [Efficient Learning for AlphaZero via Path Consistency](https://proceedings.mlr.press/v162/zhao22h/zhao22h.pdf) 2022
@@ -280,7 +316,7 @@ Here is a collection of research papers about **Monte Carlo Tree Search**.
 ## Citation
 ```latex
 @misc{lightzero,
-    title={{LightZero: OpenDILab} A lightweight MCTS algorithm library},
+    title={{LightZero: OpenDILab} A lightweight and efficient MCTS/MuZero algorithm toolkits.},
     author={LightZero Contributors},
     publisher = {GitHub},
     howpublished = {\url{https://github.com/opendilab/LightZero}},
@@ -295,6 +331,9 @@ This repo is partially based on the following repo, many thanks to their pioneer
 - https://github.com/opendilab/DI-engine
 - https://github.com/YeWR/EfficientZero
 - https://github.com/werner-duvaud/muzero-general
+
+A special thanks to [@PaParaZz1](https://github.com/PaParaZz1), [@karroyan](https://github.com/karroyan), [@nighood](https://github.com/nighood), 
+[@jayyoung0802](https://github.com/jayyoung0802), [@timothijoe](https://github.com/timothijoe), [@TuTuHuss](https://github.com/TuTuHuss), [@puyuan1996](https://github.com/puyuan1996), [@HansBug](https://github.com/HansBug) for their contributions and support.
 
 
 ## License

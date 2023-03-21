@@ -16,6 +16,7 @@ data_*
 *.so
 *.gv
 *.png
+*.csv
 
 pkg/
 src/
@@ -42,7 +43,7 @@ src/
 *.bin
 .metadata
 bin/
-tmp/
+bc/
 *.tmp
 *.bak
 *.swp
@@ -1430,14 +1431,12 @@ collect_demo_data_config.py
 !ding/**/*.py
 events.*
 /test_*
-/core/rl_utils/**/*.cpp
-/core/rl_utils/**/*.so
-/core/rl_utils/**/*.h
-!/lzero/rl_utils/**/lib
-!/core/rl_utils/**/lib/*.cpp
-!/core/rl_utils/**/lib/*.hpp
-!/core/rl_utils/**/lib/*.h
-
-/lzero/bonus/eval_cpp_cython_jax/eval_cython/ucb_score_cython.cpp
-/lzero/bonus/eval_cpp_cython_jax/eval_cython_cpp/ucb_score_cython_cpp.cpp
-/lzero/bonus/eval_cpp_cython_jax/eval_cython_cpp_openmp/ucb_score_cython_openmp_cpp.cpp
+/lzero/mcts/**/*.cpp
+/lzero/mcts/**/*.so
+/lzero/mcts/**/*.h
+!/lzero/mcts/**/lib
+!/lzero/mcts/**/lib/*.cpp
+!/lzero/mcts/**/lib/*.hpp
+!/lzero/mcts/**/lib/*.h
+**/tb/*
+**/mcts/ctree/tests_cpp/*

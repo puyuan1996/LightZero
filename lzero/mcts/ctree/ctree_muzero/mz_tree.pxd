@@ -2,11 +2,11 @@
 from libcpp.vector cimport vector
 
 
-cdef extern from "cminimax.cpp":
+cdef extern from "../common_lib/cminimax.cpp":
     pass
 
 
-cdef extern from "cminimax.h" namespace "tools":
+cdef extern from "../common_lib/cminimax.h" namespace "tools":
     cdef cppclass CMinMaxStats:
         CMinMaxStats() except +
         float maximum, minimum, value_delta_max
@@ -24,21 +24,20 @@ cdef extern from "cminimax.h" namespace "tools":
 
         void set_delta(float value_delta_max)
 
-cdef extern from "cnode.cpp":
+cdef extern from "lib/cnode.cpp":
     pass
 
 
-cdef extern from "cnode.h" namespace "tree":
+cdef extern from "lib/cnode.h" namespace "tree":
     cdef cppclass CNode:
         CNode() except +
         CNode(float prior, vector[int] &legal_actions) except +
         int visit_count, to_play, hidden_state_index_x, hidden_state_index_y, best_action
         float value_prefixs, prior, value_sum, parent_value_prefix
-        vector[CNode]* ptr_node_pool;
 
         void expand(int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefixs, vector[float] policy_logits)
         void add_exploration_noise(float exploration_fraction, vector[float] noises)
-        float compute_mean_q(int isRoot, float parent_q, float discount)
+        float compute_mean_q(int isRoot, float parent_q, float discount_factor)
 
         int expanded()
         float value()
@@ -51,7 +50,6 @@ cdef extern from "cnode.h" namespace "tree":
         CRoots(int root_num, vector[vector[int]] legal_actions_list) except +
         int root_num
         vector[CNode] roots
-        vector[vector[CNode]] node_pools
 
         void prepare(float root_exploration_fraction, const vector[vector[float]] &noises, const vector[float] &value_prefixs, const vector[vector[float]] &policies, vector[int] to_play_batch)
         void prepare_no_noise(const vector[float] &value_prefixs, const vector[vector[float]] &policies, vector[int] to_play_batch)
@@ -68,7 +66,7 @@ cdef extern from "cnode.h" namespace "tree":
         vector[int] virtual_to_play_batchs
         vector[CNode*] nodes
 
-    cdef void cbackpropagate(vector[CNode*] &search_path, CMinMaxStats &min_max_stats, int to_play, float value, float discount)
-    void cbatch_backpropagate(int hidden_state_index_x, float discount, vector[float] value_prefixs, vector[float] values, vector[vector[float]] policies,
+    cdef void cbackpropagate(vector[CNode*] &search_path, CMinMaxStats &min_max_stats, int to_play, float value, float discount_factor)
+    void cbatch_backpropagate(int hidden_state_index_x, float discount_factor, vector[float] value_prefixs, vector[float] values, vector[vector[float]] policies,
                                CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, vector[int] &to_play_batch)
-    void cbatch_traverse(CRoots *roots, int pb_c_base, float pb_c_init, float discount, CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, vector[int] &virtual_to_play_batch)
+    void cbatch_traverse(CRoots *roots, int pb_c_base, float pb_c_init, float discount_factor, CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, vector[int] &virtual_to_play_batch)

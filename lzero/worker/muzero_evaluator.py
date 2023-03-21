@@ -1,4 +1,3 @@
-import time
 import copy
 from collections import namedtuple
 from typing import Optional, Callable, Tuple
@@ -11,29 +10,28 @@ from ding.utils import build_logger, EasyTimer
 from ding.worker.collector.base_serial_evaluator import ISerialEvaluator, VectorEvalMonitor
 from easydict import EasyDict
 
-from lzero.mcts.tree_search.game import GameHistory
 from lzero.mcts.utils import prepare_observation_list
 
 
 class MuZeroEvaluator(ISerialEvaluator):
-    # """
-    # Overview:
-    #     EfficientZero Evaluator.
-    # Interfaces:
-    #     __init__, reset, reset_policy, reset_env, close, should_eval, eval
-    # Property:
-    #     env, policy
-    # """
+    """
+    Overview:
+        The Evaluator for MCTS+RL algorithms, including MuZero, EfficientZero, Sampled EfficientZero.
+    Interfaces:
+        __init__, reset, reset_policy, reset_env, close, should_eval, eval
+    Property:
+        env, policy
+    """
 
     @classmethod
     def default_config(cls: type) -> EasyDict:
-        # """
-        # Overview:
-        #     Get evaluator's default config. We merge evaluator's default config with other default configs\
-        #         and user's config to get the final config.
-        # Return:
-        #     cfg: (:obj:`EasyDict`): evaluator's default config
-        # """
+        """
+        Overview:
+            Get evaluator's default config. We merge evaluator's default config with other default configs\
+                and user's config to get the final config.
+        Return:
+            cfg (:obj:`EasyDict`): evaluator's default config
+        """
         cfg = EasyDict(copy.deepcopy(cls.config))
         cfg.cfg_type = cls.__name__ + 'Dict'
         return cfg
@@ -53,13 +51,19 @@ class MuZeroEvaluator(ISerialEvaluator):
             instance_name: Optional[str] = 'evaluator',
             game_config: 'game_config' = None,  # noqa
     ) -> None:
-        # """
-        # Overview:
-        #     Init method. Load config and use ``self._cfg`` setting to build common serial evaluator components,
-        #     e.g. logger helper, timer.
-        # Arguments:
-        #     - cfg (:obj:`EasyDict`): Configuration EasyDict.
-        # """
+        """
+        Overview:
+            Init method. Load config and use ``self._cfg`` setting to build common serial evaluator components,
+            e.g. logger helper, timer.
+        Arguments:
+            - cfg (:obj:`EasyDict`): Configuration EasyDict.
+            - env (:obj:`BaseEnvManager`): the subclass of vectorized env_manager(BaseEnvManager)
+            - policy (:obj:`namedtuple`): the api namedtuple of collect_mode policy
+            - tb_logger (:obj:`SummaryWriter`): tensorboard handle
+            - exp_name (:obj:`str`): Experiment name, which is used to indicate output directory.
+            - instance_name (:obj:`Optional[str]`): Name of this instance.
+            - game_config: Config of game.
+        """
         self._cfg = cfg
         self._exp_name = exp_name
         self._instance_name = instance_name
@@ -78,21 +82,23 @@ class MuZeroEvaluator(ISerialEvaluator):
         self._default_n_episode = cfg.n_episode
         self._stop_value = cfg.stop_value
 
-        # MuZero
+        # ==============================================================
+        # MCTS+RL related core code
+        # ==============================================================
         self.game_config = game_config
 
     def reset_env(self, _env: Optional[BaseEnvManager] = None) -> None:
-        # """
-        # Overview:
-        #     Reset evaluator's environment. In some case, we need evaluator use the same policy in different \
-        #         environments. We can use reset_env to reset the environment.
-        #     If _env is None, reset the old environment.
-        #     If _env is not None, replace the old environment in the evaluator with the \
-        #         new passed in environment and launch.
-        # Arguments:
-        #     - env (:obj:`Optional[BaseEnvManager]`): instance of the subclass of vectorized \
-        #         env_manager(BaseEnvManager)
-        # """
+        """
+        Overview:
+            Reset evaluator's environment. In some case, we need evaluator use the same policy in different \
+                environments. We can use reset_env to reset the environment.
+            If _env is None, reset the old environment.
+            If _env is not None, replace the old environment in the evaluator with the \
+                new passed in environment and launch.
+        Arguments:
+            - env (:obj:`Optional[BaseEnvManager]`): instance of the subclass of vectorized \
+                env_manager(BaseEnvManager)
+        """
         if _env is not None:
             self._env = _env
             self._env.launch()
@@ -101,35 +107,34 @@ class MuZeroEvaluator(ISerialEvaluator):
             self._env.reset()
 
     def reset_policy(self, _policy: Optional[namedtuple] = None) -> None:
-        # """
-        # Overview:
-        #     Reset evaluator's policy. In some case, we need evaluator work in this same environment but use\
-        #         different policy. We can use reset_policy to reset the policy.
-        #     If _policy is None, reset the old policy.
-        #     If _policy is not None, replace the old policy in the evaluator with the new passed in policy.
-        # Arguments:
-        #     - policy (:obj:`Optional[namedtuple]`): the api namedtuple of eval_mode policy
-        # """
+        """
+        Overview:
+            Reset evaluator's policy. In some case, we need evaluator work in this same environment but use\
+                different policy. We can use reset_policy to reset the policy.
+            If _policy is None, reset the old policy.
+            If _policy is not None, replace the old policy in the evaluator with the new passed in policy.
+        Arguments:
+            - policy (:obj:`Optional[namedtuple]`): the api namedtuple of eval_mode policy
+        """
         assert hasattr(self, '_env'), "please set env first"
         if _policy is not None:
             self._policy = _policy
-        # self._action_shape = _policy.get_attribute('cfg').model.action_shape  # TODO
         self._policy.reset()
 
     def reset(self, _policy: Optional[namedtuple] = None, _env: Optional[BaseEnvManager] = None) -> None:
-        # """
-        # Overview:
-        #     Reset evaluator's policy and environment. Use new policy and environment to collect data.
-        #     If _env is None, reset the old environment.
-        #     If _env is not None, replace the old environment in the evaluator with the new passed in \
-        #         environment and launch.
-        #     If _policy is None, reset the old policy.
-        #     If _policy is not None, replace the old policy in the evaluator with the new passed in policy.
-        # Arguments:
-        #     - policy (:obj:`Optional[namedtuple]`): the api namedtuple of eval_mode policy
-        #     - env (:obj:`Optional[BaseEnvManager]`): instance of the subclass of vectorized \
-        #         env_manager(BaseEnvManager)
-        # """
+        """
+        Overview:
+            Reset evaluator's policy and environment. Use new policy and environment to collect data.
+            If _env is None, reset the old environment.
+            If _env is not None, replace the old environment in the evaluator with the new passed in \
+                environment and launch.
+            If _policy is None, reset the old policy.
+            If _policy is not None, replace the old policy in the evaluator with the new passed in policy.
+        Arguments:
+            - policy (:obj:`Optional[namedtuple]`): the api namedtuple of eval_mode policy
+            - env (:obj:`Optional[BaseEnvManager]`): instance of the subclass of vectorized \
+                env_manager(BaseEnvManager)
+        """
         if _env is not None:
             self.reset_env(_env)
         if _policy is not None:
@@ -139,11 +144,11 @@ class MuZeroEvaluator(ISerialEvaluator):
         self._end_flag = False
 
     def close(self) -> None:
-        # """
-        # Overview:
-        #     Close the evaluator. If end_flag is False, close the environment, flush the tb_logger\
-        #         and close the tb_logger.
-        # """
+        """
+        Overview:
+            Close the evaluator. If end_flag is False, close the environment, flush the tb_logger\
+                and close the tb_logger.
+        """
         if self._end_flag:
             return
         self._end_flag = True
@@ -160,11 +165,13 @@ class MuZeroEvaluator(ISerialEvaluator):
         self.close()
 
     def should_eval(self, train_iter: int) -> bool:
-        # """
-        # Overview:
-        #     Determine whether you need to start the evaluation mode, if the number of training has reached\
-        #         the maximum number of times to start the evaluator, return True
-        # """
+        """
+        Overview:
+            Determine whether you need to start the evaluation mode, if the number of training has reached\
+                the maximum number of times to start the evaluator, return True
+        Arguments:
+            - train_iter (:obj:`int`): Current training iteration.
+        """
         if train_iter == self._last_eval_iter:
             return False
         if (train_iter - self._last_eval_iter) < self._cfg.eval_freq and train_iter != 0:
@@ -180,18 +187,23 @@ class MuZeroEvaluator(ISerialEvaluator):
             n_episode: Optional[int] = None,
             config: Optional[dict] = None,
     ) -> Tuple[bool, float]:
-        # '''
-        # Overview:
-        #     Evaluate policy and store the best policy based on whether it reaches the highest historical reward.
-        # Arguments:
-        #     - save_ckpt_fn (:obj:`Callable`): Saving ckpt function, which will be triggered by getting the best reward.
-        #     - train_iter (:obj:`int`): Current training iteration.
-        #     - envstep (:obj:`int`): Current env interaction step.
-        #     - n_episode (:obj:`int`): Number of evaluation episodes.
-        # Returns:
-        #     - stop_flag (:obj:`bool`): Whether this training program can be ended.
-        #     - eval_reward (:obj:`float`): Current eval_reward.
-        # '''
+        """
+        Overview:
+            Evaluate policy and store the best policy based on whether it reaches the highest historical reward.
+        Arguments:
+            - save_ckpt_fn (:obj:`Callable`): Saving ckpt function, which will be triggered by getting the best reward.
+            - train_iter (:obj:`int`): Current training iteration.
+            - envstep (:obj:`int`): Current env interaction step.
+            - n_episode (:obj:`int`): Number of evaluation episodes.
+        Returns:
+            - stop_flag (:obj:`bool`): Whether this training program can be ended.
+            - eval_reward (:obj:`float`): Current eval_reward.
+        """
+        if self.game_config.sampled_algo:
+            from lzero.mcts.tree_search.game_sampled_efficientzero import GameBlock
+        else:
+            from lzero.mcts.buffer.game_block import GameBlock
+
         if n_episode is None:
             n_episode = self._default_n_episode
         assert n_episode is not None, "please indicate eval n_episode"
@@ -205,63 +217,38 @@ class MuZeroEvaluator(ISerialEvaluator):
         # initializations
         init_obs = self._env.ready_obs
 
-        retry_waiting_time = 0.1
-        while len(init_obs.keys()) != self._env_num:
-            # Wait for all envs to finish resetting.
-            # self._logger.info('-----'*20)
-            # print('init_obs.keys():', init_obs.keys())
-            self._logger.info('Wait for all envs to finish resetting:')
-            self._logger.info('self._env_states {}'.format(self._env._env_states))
-            time.sleep(retry_waiting_time)
-            self._logger.info('sleep {} s'.format(retry_waiting_time))
-            self._logger.info('self._env_states {}'.format(self._env._env_states))
-            init_obs = self._env.ready_obs
-
-        # init_obs = to_tensor(init_obs, dtype=torch.float32)
         action_mask = [init_obs[i]['action_mask'] for i in range(env_nums)]
         action_mask_dict = {i: to_ndarray(init_obs[i]['action_mask']) for i in range(env_nums)}
 
-        if 'to_play' in init_obs[0]:
-            two_player_game = True
-        else:
-            two_player_game = False
-        if two_player_game:
-            to_play = [init_obs[i]['to_play'] for i in range(env_nums)]
-            to_play_dict = {i: to_ndarray(init_obs[i]['to_play']) for i in range(env_nums)}
-
+        to_play = [init_obs[i]['to_play'] for i in range(env_nums)]
+        to_play_dict = {i: to_ndarray(init_obs[i]['to_play']) for i in range(env_nums)}
         dones = np.array([False for _ in range(env_nums)])
 
-        game_histories = [
-            GameHistory(
+        game_blocks = [
+            GameBlock(
                 self._env.action_space,
-                game_history_length=self.game_config.game_history_length,
+                game_block_length=self.game_config.game_block_length,
                 config=self.game_config
             ) for _ in range(env_nums)
         ]
         for i in range(env_nums):
-            game_histories[i].init(
+            game_blocks[i].init(
                 [to_ndarray(init_obs[i]['observation']) for _ in range(self.game_config.model.frame_stack_num)]
             )
-
-        ep_ori_rewards = np.zeros(env_nums)
-        ep_clip_rewards = np.zeros(env_nums)
 
         ready_env_id = set()
         remain_episode = n_episode
 
         with self._timer:
             while not eval_monitor.is_finished():
-                # stack_obs = [game_history.step_obs() for game_history in game_histories]
-
                 # Get current ready env obs.
                 # only for subprocess, to get the ready_env_id
                 obs = self._env.ready_obs
-                # TODO(pu): subprocess
                 new_available_env_id = set(obs.keys()).difference(ready_env_id)
                 ready_env_id = ready_env_id.union(set(list(new_available_env_id)[:remain_episode]))
                 remain_episode -= min(len(new_available_env_id), remain_episode)
 
-                stack_obs = {env_id: game_histories[env_id].step_obs() for env_id in ready_env_id}
+                stack_obs = {env_id: game_blocks[env_id].step_obs() for env_id in ready_env_id}
                 stack_obs = list(stack_obs.values())
 
                 action_mask_dict = {env_id: action_mask_dict[env_id] for env_id in ready_env_id}
@@ -271,18 +258,19 @@ class MuZeroEvaluator(ISerialEvaluator):
 
                 stack_obs = to_ndarray(stack_obs)
                 stack_obs = prepare_observation_list(stack_obs)
+                stack_obs = torch.from_numpy(stack_obs).to(self.game_config.device).float()
 
-                if self.game_config.image_based:
-                    stack_obs = torch.from_numpy(stack_obs).to(self.game_config.device).float() / 255.0
-                else:
-                    stack_obs = torch.from_numpy(np.array(stack_obs)).to(self.game_config.device)
-                if two_player_game:
-                    policy_output = self._policy.forward(stack_obs, action_mask, to_play)
-                else:
-                    policy_output = self._policy.forward(stack_obs, action_mask, None)
+                # ==============================================================
+                # policy forward
+                # ==============================================================
+                policy_output = self._policy.forward(stack_obs, action_mask, to_play)
 
                 actions_no_env_id = {k: v['action'] for k, v in policy_output.items()}
                 distributions_dict_no_env_id = {k: v['distributions'] for k, v in policy_output.items()}
+                if self.game_config.sampled_algo:
+                    root_sampled_actions_dict_no_env_id = {k: v['root_sampled_actions'] for k, v in
+                                                           policy_output.items()}
+
                 value_dict_no_env_id = {k: v['value'] for k, v in policy_output.items()}
                 pred_value_dict_no_env_id = {k: v['pred_value'] for k, v in policy_output.items()}
                 visit_entropy_dict_no_env_id = {
@@ -293,50 +281,48 @@ class MuZeroEvaluator(ISerialEvaluator):
                 # TODO(pu): subprocess
                 actions = {}
                 distributions_dict = {}
+                if self.game_config.sampled_algo:
+                    root_sampled_actions_dict = {}
                 value_dict = {}
                 pred_value_dict = {}
                 visit_entropy_dict = {}
                 for index, env_id in enumerate(ready_env_id):
                     actions[env_id] = actions_no_env_id.pop(index)
                     distributions_dict[env_id] = distributions_dict_no_env_id.pop(index)
+                    if self.game_config.sampled_algo:
+                        root_sampled_actions_dict[env_id] = root_sampled_actions_dict_no_env_id.pop(index)
                     value_dict[env_id] = value_dict_no_env_id.pop(index)
                     pred_value_dict[env_id] = pred_value_dict_no_env_id.pop(index)
                     visit_entropy_dict[env_id] = visit_entropy_dict_no_env_id.pop(index)
 
+                # ==============================================================
                 # Interact with env.
+                # ==============================================================
                 timesteps = self._env.step(actions)
-                # for debug
-                # if len(timesteps.keys())!=self._env_num:
-                #     print(f'current ready env id is {list(timesteps.keys())}')
 
                 for env_id, t in timesteps.items():
                     i = env_id
-                    obs, ori_reward, done, info = t.obs, t.reward, t.done, t.info
-                    if self.game_config.clip_reward:
-                        clip_reward = np.sign(ori_reward)
-                    else:
-                        clip_reward = ori_reward
-                    game_histories[i].store_search_stats(distributions_dict[i], value_dict[i])
-                    if two_player_game:
-                        # for two_player board games
-                        # append a transition tuple, including a_t, o_{t+1}, r_{t}, action_mask_{t}, to_play_{t}
-                        # in ``game_histories[env_id].init``, we have append o_{t} in ``self.obs_history``
-                        game_histories[i].append(
-                            actions[i], to_ndarray(obs['observation']), clip_reward, action_mask_dict[i],
-                            to_play_dict[i]
+                    obs, reward, done, info = t.obs, t.reward, t.done, t.info
+                    if self.game_config.sampled_algo:
+                        game_blocks[env_id].store_search_stats(
+                            distributions_dict[env_id], value_dict[env_id], root_sampled_actions_dict[env_id]
                         )
                     else:
-                        game_histories[i].append(actions[i], to_ndarray(obs['observation']), clip_reward)
+                        game_blocks[i].store_search_stats(distributions_dict[i], value_dict[i])
+                    # for two_player board games
+                    # append a transition tuple, including a_t, o_{t+1}, r_{t}, action_mask_{t}, to_play_{t}
+                    # in ``game_blocks[env_id].init``, we have append o_{t} in ``self.obs_history``
+                    game_blocks[i].append(
+                        actions[i], to_ndarray(obs['observation']), reward, action_mask_dict[i],
+                        to_play_dict[i]
+                    )
 
                     # NOTE: the position of code snippt is very important.
                     # the obs['action_mask'] and obs['to_play'] is corresponding to next action
-                    if two_player_game:
-                        action_mask_dict[i] = to_ndarray(obs['action_mask'])
-                        to_play_dict[i] = to_ndarray(obs['to_play'])
+                    action_mask_dict[i] = to_ndarray(obs['action_mask'])
+                    to_play_dict[i] = to_ndarray(obs['to_play'])
 
                     dones[i] = done
-                    ep_ori_rewards[i] += ori_reward
-                    ep_clip_rewards[i] += clip_reward
 
                     if t.done:
                         # Env reset is done by env_manager automatically.
@@ -357,24 +343,20 @@ class MuZeroEvaluator(ISerialEvaluator):
                             if len(init_obs.keys()) != self._env_num:
                                 while env_id not in init_obs.keys():
                                     init_obs = self._env.ready_obs
-                                    print(f'wailt the {env_id} env to reset')
+                                    print(f'wait the {env_id} env to reset')
 
                             init_obs = init_obs[env_id]['observation']
                             init_obs = to_ndarray(init_obs)
                             action_mask_dict[env_id] = to_ndarray(init_obs[env_id]['action_mask'])
                             to_play_dict[env_id] = to_ndarray(init_obs[env_id]['to_play'])
 
-                            game_histories[i] = GameHistory(
+                            game_blocks[i] = GameBlock(
                                 self._env.action_space,
-                                game_history_length=self.game_config.game_history_length,
+                                game_block_length=self.game_config.game_block_length,
                                 config=self.game_config
                             )
-                            # stack_obs_windows[env_id] = [init_obs for _ in range(self.game_config.model.frame_stack_num)]
-                            # game_histories[env_id].init(stack_obs_windows[env_id])
-                            # last_game_histories[env_id] = None
-                            # last_game_priorities[env_id] = None
 
-                            game_histories[i].init(
+                            game_blocks[i].init(
                                 [init_obs[i]['observation'] for _ in range(self.game_config.model.frame_stack_num)]
                             )
 

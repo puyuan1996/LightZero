@@ -40,7 +40,7 @@ gomoku_efficientzero_config = dict(
         cuda=True,
         model=dict(
             projection_input_dim_type='board_games',
-            representation_model_type='conv_res_blocks',
+            representation_network_type='conv_res_blocks',
             observation_shape=(12, board_size, board_size),  # if frame_stack_num=4
             action_space_size=int(1 * board_size * board_size),
             num_res_blocks=1,
@@ -113,18 +113,18 @@ gomoku_efficientzero_create_config = dict(
         import_names=['lzero.policy.efficientzero'],
     ),
     collector=dict(
-        type='episode_efficientzero',
+        type='episode_muzero',
         get_train_sample=True,
-        import_names=['lzero.worker.efficientzero_collector'],
+        import_names=['lzero.worker.muzero_collector'],
     )
 )
 gomoku_efficientzero_create_config = EasyDict(gomoku_efficientzero_create_config)
 create_config = gomoku_efficientzero_create_config
 
 if __name__ == "__main__":
-    from lzero.entry import serial_pipeline_efficientzero_eval
+    from lzero.entry import eval_muzero
     for seed in range(5):
-        serial_pipeline_efficientzero_eval(
+        eval_muzero(
             [main_config, create_config], game_config=game_config, seed=seed, max_env_step=int(1e6)
         )
         print(f'eval seed {seed} done!')

@@ -16,12 +16,10 @@ tictactoe_alphazero_config = dict(
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
         n_evaluator_episode=evaluator_env_num,
-        channel_last=False,
-        collect_max_episode_steps=int(1.08e4),
-        eval_max_episode_steps=int(1.08e5),
         board_size=board_size,
         battle_mode='self_play_mode',
-        prob_random_agent=0.,
+        # NOTE
+        channel_last=False,
         agent_vs_human=agent_vs_human,
         manager=dict(shared_memory=False, ),
     ),
@@ -33,8 +31,8 @@ tictactoe_alphazero_config = dict(
         board_size=board_size,
         model=dict(
             categorical_distribution=False,
-            # representation_model_type='identity',
-            representation_model_type='conv_res_blocks',
+            # representation_network_type='identity',
+            representation_network_type='conv_res_blocks',
             observation_shape=(3, board_size, board_size),
             action_space_size=int(1 * board_size * board_size),
             downsample=False,
@@ -95,7 +93,7 @@ tictactoe_alphazero_config = dict(
         ),
         other=dict(
             replay_buffer=dict(
-                replay_buffer_size=int(1e5),
+                replay_buffer_size=int(1e6),
                 type='naive',
                 save_episode=False,
                 periodic_thruput_seconds=60,
@@ -133,12 +131,12 @@ tictactoe_alphazero_create_config = EasyDict(tictactoe_alphazero_create_config)
 create_config = tictactoe_alphazero_create_config
 
 if __name__ == '__main__':
-    from lzero.entry import serial_pipeline_alphazero_eval
+    from lzero.entry import eval_alphazero
     import numpy as np
 
     seed = 0
     test_episodes = 5
-    reward_mean, reward_lst = serial_pipeline_alphazero_eval(
+    reward_mean, reward_lst = eval_alphazero(
         [main_config, create_config], seed=seed, test_episodes=test_episodes, max_env_step=int(1e5)
     )
 
