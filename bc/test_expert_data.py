@@ -326,7 +326,7 @@ for i in range(len(dataset)):
 
 if __name__ == "__main__":
     from breakout_bc_config import main_config, create_config
-    expert_path = 'ez_pong_expert.pkl'
+    expert_path = 'ez_breakout_expert.pkl'
     import argparse
 
     parser = argparse.ArgumentParser()
