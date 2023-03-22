@@ -546,7 +546,7 @@ class EfficientZeroCollectDemoPolicy(Policy):
                 #     self._cfg.root_exploration_fraction, noises, value_prefix_roots, policy_logits, to_play
                 # )
                 # self._mcts_collect.search(roots, self._collect_model, hidden_state_roots, reward_hidden_roots, to_play)
-
+                #
                 # ==============================================================
                 # collect_demo related code
                 # NOTE: collect the pre-trained agent data, we don't add noise.
