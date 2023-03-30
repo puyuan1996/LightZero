@@ -265,7 +265,7 @@ class InteractionSerialEvaluator(ISerialEvaluator):
         return stop_flag, return_info
 
 
-def test_main(
+def check_main(
         input_cfg: Union[str, Tuple[dict, dict]],
         seed: int,
         dataset: list,
@@ -337,7 +337,10 @@ def get_dataset(path):
 if __name__ == "__main__":
     from atari_efficientzero_collect_demo_config import main_config, create_config
 
-    expert_path = 'ez_breakout_seed0_1eps.pkl'
+    main_config.env.eval_max_episode_steps = int(5e3)
+
+    # expert_path = 'ez_breakout_seed0_1eps_collect-return-274_epslife-t_ctree.pkl'
+    expert_path = "ez_breakout_seed0_1eps_return422_ctree_epslife-f_ms5e3.pkl"
 
     import argparse
 
@@ -346,6 +349,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     real_dataset = get_dataset(expert_path)
-    test_main([main_config, create_config], args.seed, real_dataset)
+    check_main([main_config, create_config], args.seed, real_dataset)
 
 

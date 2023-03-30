@@ -22,6 +22,20 @@ cdef class ResultsWrapper:
     @cython.binding
     def get_search_len(self):
         return self.cresults.search_lens
+    
+    # TODO(pu)
+    # @cython.binding
+    # def get_results_nodes(self):
+    #    return self.cresults.nodes
+
+    # @cython.binding
+    # def get_results_search_paths(self):
+    #    return self.cresults.search_paths
+
+    # @cython.binding
+    # def get_results(self):
+    #    return self.cresults
+    
 
 cdef class Roots:
     @cython.binding
@@ -97,3 +111,25 @@ def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_f
                     results.cresults, virtual_to_play_batch)
 
     return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+
+
+@cython.binding
+def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_factor, MinMaxStatsList min_max_stats_lst,
+                   ResultsWrapper results, list virtual_to_play_batch):
+    cbatch_traverse(roots.roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst.cmin_max_stats_lst,
+                    results.cresults, virtual_to_play_batch)
+
+    return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+
+
+# @cython.binding
+# def get_results(ResultsWrapper results):
+#    return results.cresults
+
+# @cython.binding
+# def get_results_nodes(ResultsWrapper results):
+#     return results.cresults.nodes
+
+# @cython.binding
+# def get_results_search_paths(ResultsWrapper results):
+#    return results.cresults.search_path

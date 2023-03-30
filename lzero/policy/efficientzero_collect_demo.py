@@ -11,7 +11,7 @@ from ding.utils import POLICY_REGISTRY
 from torch.distributions import Categorical
 from torch.nn import L1Loss
 
-from lzero.mcts import EfficientZeroMCTSCtree as MCTSCtree
+from lzero.mcts import EfficientZeroCollectDemoMCTSCtree as MCTSCtree
 from lzero.mcts import EfficientZeroCollectDemoMCTSPtree as MCTSPtree
 from lzero.model import ImageTransforms
 from lzero.policy import scalar_transform, InverseScalarTransform, modified_cross_entropy_loss, phi_transform, \
@@ -530,7 +530,8 @@ class EfficientZeroCollectDemoPolicy(Policy):
                 roots.prepare(
                     self._cfg.root_exploration_fraction, noises, value_prefix_roots, policy_logits, to_play
                 )
-                self._mcts_collect.search(roots, self._collect_model, hidden_state_roots, reward_hidden_roots, to_play)
+                # self._mcts_collect.search(roots, self._collect_model, hidden_state_roots, reward_hidden_roots, to_play)
+                results, leaf_hidden_states = self._mcts_collect.search(roots, self._collect_model, hidden_state_roots, reward_hidden_roots, to_play)
             else:
                 # python mcts_tree
                 legal_actions = [
@@ -583,6 +584,7 @@ class EfficientZeroCollectDemoPolicy(Policy):
                         'leaf_node': results.nodes[i],  # the leaf node
                         'leaf_hidden_state': leaf_hidden_states[i],  # the leaf hidden state
                         'search_path': results.search_paths[i],  # list of node in search_path, the node has best_action attribute
+                        #
                         'action': action,
                         'distributions': distributions,
                         'visit_count_distribution_entropy': visit_count_distribution_entropy,
@@ -592,6 +594,10 @@ class EfficientZeroCollectDemoPolicy(Policy):
                     }
                 else:
                     output[env_id] = {
+                        # 'leaf_node': results.cresults.nodes[i],  # the leaf node
+                        # 'leaf_hidden_state': leaf_hidden_states[i],  # the leaf hidden state
+                        # 'search_path': results.cresults.search_paths[i], # list of node in search_path, the node has best_action attribute
+                        #
                         'action': action,
                         'distributions': distributions,
                         'visit_count_distribution_entropy': visit_count_distribution_entropy,

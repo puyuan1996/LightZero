@@ -71,6 +71,7 @@ atari_efficientzero_config = dict(
         game_block_length=400,
         num_simulations=num_simulations,
         reanalyze_ratio=reanalyze_ratio,
+        threshold_training_steps_for_final_lr=int(1e5),
         manual_temperature_decay=False,
         fixed_temperature_value=0.25,
         replay_buffer_size=int(1e6),  # the size/capacity of replay_buffer, in the terms of transitions.

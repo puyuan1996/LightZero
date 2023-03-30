@@ -52,16 +52,19 @@ atari_efficientzero_config = dict(
         n_evaluator_episode=evaluator_env_num,
         manager=dict(shared_memory=False, ),
         max_episode_steps=int(1.08e5),
-        episode_life=True,
         channel_last=True,
-        render_mode_human=False,
         scale=True,
+        render_mode_human=False,
+        # render_mode_human=True,
+        # episode_life=True,
         clip_rewards=False,
+        episode_life=False,
+        collect_max_episode_steps=int(5e3),
     ),
     policy=dict(
         # collect_demo related
-        mcts_ctree=False,
-        # mcts_ctree=True,
+        # mcts_ctree=False,
+        mcts_ctree=True,
 
         device=device,
         collector_env_num=collector_env_num,
@@ -112,16 +115,15 @@ create_config = atari_efficientzero_create_config
 
 if __name__ == "__main__":
     from lzero.entry import collect_muzero
-
     # collect_demo related
     # the pretrained model path.
     # Users should add their own model path here. Model path should lead to a model.
     # Absolute path is recommended.
     # In LightZero, it is ``exp_name/ckpt/ckpt_best.pth.tar``.
-    model_path = '/Users/puyuan/code/LightZero/zoo/atari/tb/breakout_efficientzero_ns50_upc800_rr0.0_ms1e4_seed0/ckpt/ckpt_best.pth.tar'
-    # model_path = '/Users/puyuan/code/LightZero/zoo/atari/tb/breakout_efficientzero_ns50_upc800_rr0.0_ms1e4_seed0/ckpt/iteration_90000.pth.tar'
+    model_path = '/Users/puyuan/code/LightZero/zoo/atari/tb/Breakout_efficientzero_ns50_upc1000_rr0.0_seed0_ms1e4/ckpt/ckpt_best.pth.tar'
 
-    # data_path = 'ez_breakout_seed0_1eps_ms1e5_ctree.pkl'
-    data_path = 'ez_breakout_seed0_1eps_ms1e5_ptree.pkl'
+    data_path = 'ez_breakout_seed0_1eps_return422_ctree_epslife-f_ms5e3.pkl'
+    # TODO：
+    # data_path = 'ez_breakout_seed0_1eps_return422_ctree_epslife-f_leaf-node_leaf-hidden-state_search-path_ms5e3.pkl'
 
     collect_muzero([main_config, create_config], seed=0, max_env_step=max_env_step, model_path=model_path, data_path=data_path)
