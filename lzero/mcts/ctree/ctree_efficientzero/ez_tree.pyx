@@ -1,6 +1,14 @@
 # distutils: language=c++
 import cython
 from libcpp.vector cimport vector
+import sys
+from cpython cimport PyObject, PyList_New, PyLong_FromVoidPtr, PyList_SET_ITEM, Py_INCREF
+# from cpython cimport PyListObject
+# from cpython.list cimport PyListObject, PyList_New, PyList_GET_ITEM, Py_INCREF, PyObject, PyLong_FromVoidPtr
+from libcpp.vector cimport vector
+from cpython.ref cimport PyObject, Py_INCREF
+from cpython.list cimport PyList_New, PyList_SET_ITEM
+from cpython.long cimport PyLong_FromVoidPtr
 
 cdef class MinMaxStatsList:
     @cython.binding
@@ -15,14 +23,34 @@ cdef class MinMaxStatsList:
         del self.cmin_max_stats_lst
 
 cdef class ResultsWrapper:
+
     @cython.binding
     def __cinit__(self, int num):
         self.cresults = CSearchResults(num)
-
+    
     @cython.binding
     def get_search_len(self):
         return self.cresults.search_lens
-    
+
+    @cython.binding
+    def get_nodes(self):
+        cdef vector[CNode*] nodes = self.cresults.nodes
+        cdef Py_ssize_t i
+        # cdef PyObject *node_list = PyList_New(nodes.size())
+        cdef PyObject *node_list = <PyObject *>PyList_New(<Py_ssize_t>nodes.size())
+        
+        if node_list is NULL:
+            return NULL
+        for i in range(nodes.size()):
+            PyList_SET_ITEM(node_list, i, PyLong_FromVoidPtr(<void*>nodes[i]))
+        # Increase reference count of the object before returning
+        Py_INCREF(node_list)
+        return <object>node_list
+        # return node_list
+        # return <object>PyListObject.from_pyobject(node_list)
+        # return <object>node_list
+        # return <PyObject *>node_list
+
     # TODO(pu)
     # @cython.binding
     # def get_results_nodes(self):

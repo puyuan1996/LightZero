@@ -67,11 +67,14 @@ cdef extern from "lib/cnode.h" namespace "tree":
     cdef cppclass CSearchResults:
         CSearchResults() except +
         CSearchResults(int num) except +
+
+        # TODO
+        vector[CNode *] get_nodes() except +
+
         int num
         vector[int] hidden_state_index_x_lst, hidden_state_index_y_lst, last_actions, search_lens
         vector[int] virtual_to_play_batchs
         vector[CNode *] nodes
-        # TODO
         vector[vector[CNode *]] search_paths
 
 
