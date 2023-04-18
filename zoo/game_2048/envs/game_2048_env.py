@@ -118,7 +118,9 @@ class Game2048Env(gym.Env):
         except IllegalMove as e:
             logging.debug("Illegal move")
             info['illegal_move'] = True
-            done = False
+            # done = False
+            # TODO(pu): if illegal move, should we return done=True?
+            done = True
             reward = self.illegal_move_reward
 
         if self.episode_length >= self.max_episode_steps:
