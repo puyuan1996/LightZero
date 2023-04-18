@@ -15,8 +15,7 @@ config = EasyDict(dict(
     max_tile=2048,
     delay_reward_step=0,
     prob_random_agent=0.,
-    collect_max_episode_steps=int(1.08e5),
-    eval_max_episode_steps=int(1.08e5),
+    max_episode_steps=int(1e4),
 ))
 
 

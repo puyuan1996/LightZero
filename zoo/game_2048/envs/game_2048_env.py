@@ -32,8 +32,7 @@ class Game2048Env(gym.Env):
         max_tile=2048,
         delay_reward_step=0,
         prob_random_agent=0.,
-        collect_max_episode_steps=int(1.08e5),
-        eval_max_episode_steps=int(1.08e5),
+        max_episode_steps=int(1e4),
     )
     metadata = {'render.modes': ['human', 'ansi', 'rgb_array']}
 
@@ -55,6 +54,8 @@ class Game2048Env(gym.Env):
         self.obs_type = cfg.obs_type
         self.reward_normalize = cfg.reward_normalize
         self.max_tile = cfg.max_tile
+        self.max_episode_steps = cfg.max_episode_steps
+        self.episode_length = 0
 
         self.size = 4
         self.w = self.size
@@ -104,6 +105,7 @@ class Game2048Env(gym.Env):
 
     def step(self, action):
         """Perform one step of the game. This involves moving and adding a new tile."""
+        self.episode_length += 1
         logging.debug("Action {}".format(action))
         info = {'illegal_move': False}
         try:
@@ -118,6 +120,10 @@ class Game2048Env(gym.Env):
             info['illegal_move'] = True
             done = False
             reward = self.illegal_move_reward
+
+        if self.episode_length >= self.max_episode_steps:
+            # print("episode_length: {}".format(self.episode_length))
+            done = True
 
         observation = encoding_board(self.board)
         assert observation.shape == (4, 4, 16)
@@ -403,7 +409,6 @@ class Game2048Env(gym.Env):
     def create_collector_env_cfg(cfg: dict) -> List[dict]:
         collector_env_num = cfg.pop('collector_env_num')
         cfg = copy.deepcopy(cfg)
-        cfg.max_episode_steps = cfg.collect_max_episode_steps
         cfg.reward_normalize = True
         return [cfg for _ in range(collector_env_num)]
 
@@ -411,7 +416,6 @@ class Game2048Env(gym.Env):
     def create_evaluator_env_cfg(cfg: dict) -> List[dict]:
         evaluator_env_num = cfg.pop('evaluator_env_num')
         cfg = copy.deepcopy(cfg)
-        cfg.max_episode_steps = cfg.eval_max_episode_steps
         cfg.reward_normalize = False
         return [cfg for _ in range(evaluator_env_num)]
 
