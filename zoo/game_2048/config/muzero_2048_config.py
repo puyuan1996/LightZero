@@ -10,7 +10,8 @@ n_episode = 8
 evaluator_env_num = 3
 num_simulations = 50  # TODO(pu):100
 update_per_collect = 200
-batch_size = 1024
+# batch_size = 1024
+batch_size = 256
 max_env_step = int(1e6)
 reanalyze_ratio = 0.
 
@@ -27,13 +28,14 @@ reanalyze_ratio = 0.
 # ==============================================================
 
 atari_muzero_config = dict(
-    exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_mt65536_adam_sslw2_rew-morm-true_seed0',
+    exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_adam_sslw2_rew-morm-true_seed0',
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,
         obs_shape=(16, 4, 4),
         obs_type='dict_observation',
         reward_normalize=True,
+        reward_scale=100,
         max_tile=int(2**16),  # 2**11=2048, 2**16=65536
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
@@ -47,7 +49,6 @@ atari_muzero_config = dict(
             image_channel=16,
             # NOTE: whether to use the self_supervised_learning_loss. default is False
             self_supervised_learning_loss=True,
-            frame_stack_num=1,
         ),
         cuda=True,
         env_type='not_board_games',
@@ -57,7 +58,7 @@ atari_muzero_config = dict(
         td_steps=10,
         discount_factor=0.999,
         manual_temperature_decay=True,
-        optim_type='Adam',
+        optim_type='SGD',
         lr_piecewise_constant_decay=True,
         learning_rate=0.2,  # init lr for manually decay schedule
         num_simulations=num_simulations,
@@ -78,7 +79,7 @@ atari_muzero_create_config = dict(
         type='game_2048',
         import_names=['zoo.game_2048.envs.game_2048_env'],
     ),
-    env_manager=dict(type='base'),
+    env_manager=dict(type='subprocess'),
     policy=dict(
         type='muzero',
         import_names=['lzero.policy.muzero'],

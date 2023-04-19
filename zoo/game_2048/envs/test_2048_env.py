@@ -12,10 +12,14 @@ config = EasyDict(dict(
     channel_last=False,
     obs_type='raw_observation',  # options=['raw_observation', 'dict_observation']
     reward_normalize=True,
+    # reward_normalize=False,
+    reward_scale=100,
     max_tile=2048,
     delay_reward_step=0,
     prob_random_agent=0.,
     max_episode_steps=int(1e4),
+    is_collect=True,
+    # is_collect=False,
 ))
 
 
@@ -190,6 +194,7 @@ if __name__ == "__main__":
     step = 0
     while True:
         # action = env.human_to_action()
+        print('='*20)
         action = game_2048_env.random_action()
         obs, reward, done, info = game_2048_env.step(action)
         game_2048_env.render()
