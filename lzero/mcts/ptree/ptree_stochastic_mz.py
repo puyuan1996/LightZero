@@ -1,9 +1,9 @@
 """
-The Node, Roots class and related core functions for EfficientZero.
+The Node, Roots class and related core functions for MuZero.
 """
 import math
 import random
-from typing import List, Any, Tuple, Union
+from typing import List, Dict, Any, Tuple, Union
 
 import numpy as np
 import torch
@@ -14,19 +14,20 @@ from .minimax import MinMaxStats
 class Node:
     """
      Overview:
-         the node base class for EfficientZero.
+         the node base class for MuZero.
+     Arguments:
      """
 
-    def __init__(self, prior: float, legal_actions: List = None, action_space_size: int = 9) -> None:
+    def __init__(self, prior: float, legal_actions: List = None, action_space_size: int = 9, is_chance: bool = False) -> None:
         self.prior = prior
         self.legal_actions = legal_actions
         self.action_space_size = action_space_size
 
-        self.is_reset = 0
         self.visit_count = 0
         self.value_sum = 0
         self.best_action = -1
         self.to_play = 0  # default 0 means play_with_bot_mode
+        self.reward = 0
         self.value_prefix = 0.0
         self.children = {}
         self.children_index = []
@@ -34,9 +35,11 @@ class Node:
         self.latent_state_index_in_batch = 0
         self.parent_value_prefix = 0  # only used in update_tree_q method
 
+        self.is_chance = is_chance
+
     def expand(
-            self, to_play: int, latent_state_index_in_search_path: int, latent_state_index_in_batch: int, value_prefix: float,
-            policy_logits: List[float]
+            self, to_play: int, latent_state_index_in_search_path: int, latent_state_index_in_batch: int, reward: float,
+            policy_logits: List[float], is_chance: bool = False
     ) -> None:
         """
         Overview:
@@ -49,25 +52,23 @@ class Node:
             - policy_logits: (:obj:`Class List`): the policy logit of the child nodes.
         """
         self.to_play = to_play
+        self.reward = reward
+        self.is_chance = is_chance
         if self.legal_actions is None:
             self.legal_actions = np.arange(len(policy_logits))
-
         self.latent_state_index_in_search_path = latent_state_index_in_search_path
         self.latent_state_index_in_batch = latent_state_index_in_batch
-        self.value_prefix = value_prefix
-
         policy_values = torch.softmax(torch.tensor([policy_logits[a] for a in self.legal_actions]), dim=0).tolist()
-        policy = {a: policy_values[i] for i, a in enumerate(self.legal_actions)}
-        for action, p in policy.items():
-            self.children[action] = Node(p, action_space_size=self.action_space_size)
+        policy = {legal_action: policy_values[index] for index, legal_action in enumerate(self.legal_actions)}
+        for action, prior in policy.items():
+            self.children[action] = Node(prior)
 
     def add_exploration_noise(self, exploration_fraction: float, noises: List[float]) -> None:
         """
         Overview:
-            Add a noise to the prior of the child nodes.
+            add exploration noise to priors
         Arguments:
-            - exploration_fraction: the fraction to add noise.
-            - noises (:obj: list): the vector of noises added to each child node. length is len(self.legal_actions)
+            - noises (:obj: list): length is len(self.legal_actions)
         """
         for i, a in enumerate(self.legal_actions):
             """
@@ -81,25 +82,21 @@ class Node:
             prior = child.prior
             child.prior = prior * (1 - exploration_fraction) + noise * exploration_fraction
 
-    def compute_mean_q(self, is_root: bool, parent_q: float, discount_factor: float) -> float:
+    def compute_mean_q(self, is_root: int, parent_q: float, discount_factor: float) -> float:
         """
         Overview:
             Compute the mean q value of the current node.
         Arguments:
-            - is_root (:obj:`bool`): whether the current node is a root node.
+            - is_root (:obj:`int`): whether the current node is a root node.
             - parent_q (:obj:`float`): the q value of the parent node.
             - discount_factor (:obj:`float`): the discount_factor of reward.
         """
         total_unsigned_q = 0.0
         total_visits = 0
-        parent_value_prefix = self.value_prefix
         for a in self.legal_actions:
             child = self.get_child(a)
             if child.visit_count > 0:
-                true_reward = child.value_prefix - parent_value_prefix
-                if self.is_reset == 1:
-                    # TODO(pu)
-                    true_reward = child.value_prefix
+                true_reward = child.reward
                 # TODO(pu): only one step bootstrap?
                 q_of_s_a = true_reward + discount_factor * child.value
                 total_unsigned_q += q_of_s_a
@@ -111,9 +108,6 @@ class Node:
             # TODO(pu): why parent_q?
             mean_q = (parent_q + total_unsigned_q) / (total_visits + 1)
         return mean_q
-
-    def print_out(self) -> None:
-        pass
 
     def get_trajectory(self) -> List[Union[int, float]]:
         """
@@ -150,7 +144,6 @@ class Node:
         Overview:
             get children node according to the input action.
         """
-        # assert isinstance(action, int)
         if not isinstance(action, np.int64):
             action = int(action)
         return self.children[action]
@@ -181,20 +174,16 @@ class Roots:
         self.roots = []
         for i in range(self.root_num):
             if isinstance(legal_actions_list, list):
-                self.action_space_size = len(legal_actions_list[i])
-
-                self.roots.append(Node(0, legal_actions_list[i], action_space_size=self.action_space_size))
+                self.roots.append(Node(0, legal_actions_list[i]))
             else:
                 # if legal_actions_list is int
-                self.action_space_size = legal_actions_list
-
-                self.roots.append(Node(0, np.arange(legal_actions_list), action_space_size=self.action_space_size))
+                self.roots.append(Node(0, np.arange(legal_actions_list)))
 
     def prepare(
             self,
             root_noise_weight: float,
             noises: List[float],
-            value_prefixs: List[float],
+            rewards: List[float],
             policies: List[List[float]],
             to_play: int = -1
     ) -> None:
@@ -204,37 +193,35 @@ class Roots:
         Arguments:
             - root_noise_weight: the exploration fraction of roots
             - noises: the vector of noise add to the roots.
-            - value_prefixs: the vector of value prefixs of each root.
+            - rewards: the vector of rewards of each root.
             - policies: the vector of policy logits of each root.
             - to_play_batch: the vector of the player side of each root.
         """
         for i in range(self.root_num):
             #  to_play: int, latent_state_index_in_search_path: int, latent_state_index_in_batch: int,
             # TODO(pu): why latent_state_index_in_search_path=0, latent_state_index_in_batch=i?
-            if to_play in [-1, None]:
-                self.roots[i].expand(-1, 0, i, value_prefixs[i], policies[i])
-            elif to_play is [None]:
-                print('debug')
+            if to_play is None:
+                self.roots[i].expand(-1, 0, i, rewards[i], policies[i])
             else:
-                self.roots[i].expand(to_play[i], 0, i, value_prefixs[i], policies[i])
+                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i])
 
             self.roots[i].add_exploration_noise(root_noise_weight, noises[i])
             self.roots[i].visit_count += 1
 
-    def prepare_no_noise(self, value_prefixs: List[float], policies: List[List[float]], to_play: int = -1) -> None:
+    def prepare_no_noise(self, rewards: List[float], policies: List[List[float]], to_play: int = -1) -> None:
         """
         Overview:
             Expand the roots without noise.
         Arguments:
-            - value_prefixs: the vector of value prefixs of each root.
+            - rewards: the vector of rewards of each root.
             - policies: the vector of policy logits of each root.
             - to_play_batch: the vector of the player side of each root.
         """
         for i in range(self.root_num):
-            if to_play in [-1, None]:
-                self.roots[i].expand(-1, 0, i, value_prefixs[i], policies[i])
+            if to_play is None:
+                self.roots[i].expand(-1, 0, i, rewards[i], policies[i])
             else:
-                self.roots[i].expand(to_play[i], 0, i, value_prefixs[i], policies[i])
+                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i])
 
             self.roots[i].visit_count += 1
 
@@ -266,7 +253,7 @@ class Roots:
 
         return distributions
 
-    def get_values(self) -> List[float]:
+    def get_values(self) -> float:
         """
         Overview:
             Return the estimated value of each root.
@@ -289,66 +276,47 @@ class SearchResults:
         self.search_lens = []
 
 
-# not used now
-def update_tree_q(
-        root: Node, min_max_stats: MinMaxStats, discount_factor: float, players: int = 1, to_play: int = 0
-) -> None:
+def update_tree_q(root: Node, min_max_stats: MinMaxStats, discount_factor: float, players: int = 1) -> None:
     """
     Overview:
-        Update the q value of the root and its child nodes.
+        Update the value sum and visit count of nodes along the search path.
     Arguments:
-        - root: the root that update q value from.
+        - search_path: a vector of nodes on the search path.
         - min_max_stats: a tool used to min-max normalize the q value.
+        - to_play: which player to play the game in the current node.
+        - value: the value to propagate along the search path.
         - discount_factor: the discount factor of reward.
-        - players: the number of players.
     """
-    root.parent_value_prefix = 0
     node_stack = []
     node_stack.append(root)
-    is_reset = 0
     while len(node_stack) > 0:
         node = node_stack[-1]
         node_stack.pop()
 
         if node != root:
-            if players == 1:
-                true_reward = node.value_prefix - node.parent_value_prefix
-            else:
-                # NOTE: in 2 player mode, value_prefix is not calculated according to the perspective of current player of node,
-                # but treated as 1 player, just for obtaining the true reward in the perspective of current player of node.
-                # true_reward = node.value_prefix - (- parent_value_prefix)
-                true_reward = node.value_prefix - node.parent_value_prefix
-
-            if is_reset == 1:
-                true_reward = node.value_prefix
+            true_reward = node.reward
             if players == 1:
                 q_of_s_a = true_reward + discount_factor * node.value
             elif players == 2:
-                # TODO
-                q_of_s_a = true_reward + discount_factor * -node.value
+                q_of_s_a = true_reward + discount_factor * (-node.value)
 
             min_max_stats.update(q_of_s_a)
-
-        is_reset = node.is_reset
 
         for a in node.legal_actions:
             child = node.get_child(a)
             if child.expanded:
-                # NOTE: in 2 player mode, value_prefix is not calculated according to the perspective of current player of node,
-                # but treated as 1 player, just for obtaining the true reward in the perspective of current player of node.
-                child.parent_value_prefix = node.value_prefix
                 node_stack.append(child)
 
 
 def select_child(
-        root: Node, min_max_stats: MinMaxStats, pb_c_base: float, pb_c_int: float, discount_factor: float,
+        node: Node, min_max_stats: MinMaxStats, pb_c_base: float, pb_c_int: float, discount_factor: float,
         mean_q: float, players: int
 ) -> Union[int, float]:
     """
     Overview:
         Select the child node of the roots according to ucb scores.
     Arguments:
-        - root: the roots to select the child node.
+        - node: the node to select the child node.
         - min_max_stats (:obj:`Class MinMaxStats`):  a tool used to min-max normalize the score.
         - pb_c_base (:obj:`Class Float`): constant c1 used in pUCT rule, typically 1.25.
         - pb_c_int (:obj:`Class Float`): constant c2 used in pUCT rule, typically 19652.
@@ -358,21 +326,37 @@ def select_child(
     Returns:
         - action (:obj:`Union[int, float]`): Choose the action with the highest ucb score.
     """
+
+    if node.is_chance:
+        # If the node is chance we sample from the prior.
+        outcomes, probs = zip(*[(o, n.prior) for o, n in node.children.items()])
+
+        outcomes, probs = list(outcomes), np.array(list(probs))
+        remainder = np.abs((1 - probs + 1e-12).mean())
+        probs = (probs + remainder) / (probs + remainder).sum()
+        outcome = np.random.choice(outcomes, p=probs)
+        # return outcome, node.children[outcome]
+        return outcome
+
+    # _, action, child = max((self.ucb_score(self.node, child), action, child)
+    #                        for action, child in self.node.children.items())
+    # return action, child
+
+    # If the node is decision node, we select the action with the highest ucb score.
     max_score = -np.inf
     epsilon = 0.000001
     max_index_lst = []
-    for a in root.legal_actions:
-        child = root.get_child(a)
+    for a in node.legal_actions:
+        child = node.get_child(a)
         temp_score = compute_ucb_score(
-            child, min_max_stats, mean_q, root.is_reset, root.visit_count, root.value_prefix, pb_c_base, pb_c_int,
-            discount_factor, players
+            child, min_max_stats, mean_q, node.visit_count, pb_c_base, pb_c_int, discount_factor, players
         )
         if max_score < temp_score:
             max_score = temp_score
             max_index_lst.clear()
             max_index_lst.append(a)
         elif temp_score >= max_score - epsilon:
-            # TODO(pu): if the difference is less than  epsilon = 0.000001, we random choice action from  max_index_lst
+            # TODO(pu): if the difference is less than epsilon = 0.000001, we random choice action from  max_index_lst
             max_index_lst.append(a)
 
     action = 0
@@ -385,9 +369,7 @@ def compute_ucb_score(
         child: Node,
         min_max_stats: MinMaxStats,
         parent_mean_q: float,
-        is_reset: int,
         total_children_visit_counts: float,
-        parent_value_prefix: float,
         pb_c_base: float,
         pb_c_init: float,
         discount_factor: float,
@@ -407,6 +389,7 @@ def compute_ucb_score(
             - pb_c_init: constants c1 in muzero.
             - disount_factor: the discount factor of reward.
             - players: the number of players.
+            - continuous_action_space: whether the action space is continous in current env.
         Outputs:
             - ucb_value: the ucb score of the child.
     """
@@ -417,9 +400,7 @@ def compute_ucb_score(
     if child.visit_count == 0:
         value_score = parent_mean_q
     else:
-        true_reward = child.value_prefix - parent_value_prefix
-        if is_reset == 1:
-            true_reward = child.value_prefix
+        true_reward = child.reward
         if players == 1:
             value_score = true_reward + discount_factor * child.value
         elif players == 2:
@@ -443,10 +424,12 @@ def batch_traverse(
         min_max_stats_lst: List[MinMaxStats],
         results: SearchResults,
         virtual_to_play: List,
-) -> Tuple[List[int], List[int], List[Union[int, float]], List]:
+# ) -> Tuple[List[int], List[int], List[Union[int, float]], List]:
+) -> Tuple[Any, Any]:
+
     """
     Overview:
-        traverse, also called expansion. process a batch roots parallely.
+        traverse, also called selection. process a batch roots parallely.
     Arguments:
         - roots (:obj:`Any`): a batch of root nodes to be expanded.
         - pb_c_base (:obj:`float`): constant c1 used in pUCT rule, typically 1.25.
@@ -454,6 +437,7 @@ def batch_traverse(
         - discount_factor (:obj:`float`): discount_factor factor used i calculating bootstrapped value, if env is board_games, we set discount_factor=1.
         - virtual_to_play (:obj:`list`): the to_play list used in self_play collecting and training in board games,
             `virtual` is to emphasize that actions are performed on an imaginary hidden state.
+        - continuous_action_space: whether the action space is continous in current env.
     Returns:
         - latent_state_index_in_search_path (:obj:`list`): the list of x/first index of hidden state vector of the searched node, i.e. the search depth.
         - latent_state_index_in_batch (:obj:`list`): the list of y/second index of hidden state vector of the searched node, i.e. the index of batch root node, its maximum is ``batch_size``/``env_num``.
@@ -468,16 +452,10 @@ def batch_traverse(
     results.nodes = [None for i in range(results.num)]
     results.latent_state_index_in_search_path = [None for i in range(results.num)]
     results.latent_state_index_in_batch = [None for i in range(results.num)]
-    if isinstance(virtual_to_play, int):
-        if virtual_to_play in [1, 2]:
-            players = 2
-        elif virtual_to_play in [-1, None]:
-            players = 1
-    elif isinstance(virtual_to_play, list):
-        if virtual_to_play[0] in [1, 2]:
-            players = 2
-        elif virtual_to_play[0] in [-1, None]:
-            players = 1
+    if virtual_to_play in [1, 2] or virtual_to_play[0] in [1, 2]:
+        players = 2
+    elif virtual_to_play in [-1, None] or virtual_to_play[0] in [-1, None]:
+        players = 1
 
     results.search_paths = {i: [] for i in range(results.num)}
     for i in range(results.num):
@@ -486,16 +464,17 @@ def batch_traverse(
         search_len = 0
         results.search_paths[i].append(node)
 
-        # MCTS stage 1:
-        # Each simulation starts from the internal root state s0, and finishes when the simulation reaches a leaf node s_l.
+        """
+        MCTS stage 1: Selection
+            Each simulation starts from the internal root state s0, and finishes when the simulation reaches a leaf node s_l.
+        """
         # the leaf node is not expanded
         while node.expanded:
-
             mean_q = node.compute_mean_q(is_root, parent_q, discount_factor)
             is_root = 0
             parent_q = mean_q
 
-            # select action according to the pUCT rule
+            # select action according to the pUCT rule.
             action = select_child(
                 node, min_max_stats_lst.stats_lst[i], pb_c_base, pb_c_init, discount_factor, mean_q, players
             )
@@ -505,25 +484,27 @@ def batch_traverse(
                     virtual_to_play[i] = 2
                 else:
                     virtual_to_play[i] = 1
-            node.best_action = action
 
-            # move to child node according to action
+            node.best_action = action
+            # move to child node according to selected action.
             node = node.get_child(action)
+
             last_action = action
+
             results.search_paths[i].append(node)
             search_len += 1
-
             # note this return the parent node of the current searched node
             parent = results.search_paths[i][len(results.search_paths[i]) - 1 - 1]
-
             results.latent_state_index_in_search_path[i] = parent.latent_state_index_in_search_path
             results.latent_state_index_in_batch[i] = parent.latent_state_index_in_batch
             results.last_actions[i] = last_action
             results.search_lens[i] = search_len
-            # the leaf node
+            # while we break out the while loop, results.nodes[i] save the leaf node.
             results.nodes[i] = node
 
-    return results.latent_state_index_in_search_path, results.latent_state_index_in_batch, results.last_actions, virtual_to_play
+    # print(f'env {i} one simulation done!')
+    # return results.nodes, results.latent_state_index_in_search_path, results.latent_state_index_in_batch, results.last_actions, virtual_to_play
+    return results, virtual_to_play
 
 
 def backpropagate(
@@ -539,38 +520,20 @@ def backpropagate(
         - value: the value to propagate along the search path.
         - discount_factor: the discount factor of reward.
     """
-    assert to_play is None or to_play in [-1, 1, 2], f'to_play is {to_play}!'
+    assert to_play is None or to_play in [-1, 1, 2]
     if to_play is None or to_play == -1:
-        # for 1 player mode
+        # for play-with-bot mode
         bootstrap_value = value
         path_len = len(search_path)
         for i in range(path_len - 1, -1, -1):
             node = search_path[i]
             node.value_sum += bootstrap_value
             node.visit_count += 1
-
-            parent_value_prefix = 0.0
-            is_reset = 0
-            if i >= 1:
-                parent = search_path[i - 1]
-                parent_value_prefix = parent.value_prefix
-                is_reset = parent.is_reset
-
-            true_reward = node.value_prefix - parent_value_prefix
-
+            true_reward = node.reward
             min_max_stats.update(true_reward + discount_factor * node.value)
-
-            if is_reset == 1:
-                true_reward = node.value_prefix
-
             bootstrap_value = true_reward + discount_factor * bootstrap_value
-
-        # TODO(pu): the effect of different ways to update min_max_stats
-        # min_max_stats.clear()
-        # root = search_path[0]
-        # update_tree_q(root, min_max_stats, discount_factor, 1)
     else:
-        # for 2 player mode
+        # for self-play-mode
         bootstrap_value = value
         path_len = len(search_path)
         for i in range(path_len - 1, -1, -1):
@@ -580,25 +543,17 @@ def backpropagate(
 
             node.visit_count += 1
 
-            parent_value_prefix = 0.0
-            is_reset = 0
-            if i >= 1:
-                parent = search_path[i - 1]
-                parent_value_prefix = parent.value_prefix
-                is_reset = parent.is_reset
-
-            # NOTE: in 2 player mode, value_prefix is not calculated according to the perspective of current player of node,
-            # but treated as 1 player, just for obtaining the true reward in the perspective of current player of node.
+            # NOTE: in self-play-mode,
+            # we should calculate the true_reward according to the perspective of current player of node
             # true_reward = node.value_prefix - (- parent_value_prefix)
-            true_reward = node.value_prefix - parent_value_prefix
+            true_reward = node.reward
 
-            if is_reset == 1:
-                true_reward = node.value_prefix
-
+            # min_max_stats.update(true_reward + discount_factor * node.value)
             min_max_stats.update(true_reward + discount_factor * -node.value)
 
-            # to_play related
+            # TODO(pu): to_play related
             # true_reward is in the perspective of current player of node
+            # bootstrap_value = (true_reward if node.to_play == to_play else - true_reward) + discount_factor * bootstrap_value
             bootstrap_value = (
                 -true_reward if node.to_play == to_play else true_reward
             ) + discount_factor * bootstrap_value
@@ -607,13 +562,13 @@ def backpropagate(
 def batch_backpropagate(
         latent_state_index_in_search_path: int,
         discount_factor: float,
-        value_prefixs: List,
+        value_prefixs: List[float],
         values: List[float],
         policies: List[float],
         min_max_stats_lst: List[MinMaxStats],
         results: SearchResults,
-        is_reset_lst: List,
         to_play: list = None,
+        is_chance_list: list = None,
 ) -> None:
     """
     Overview:
@@ -626,22 +581,19 @@ def batch_backpropagate(
         - policies (:obj:`Class List`): the policy logits of nodes along the search path.
         - min_max_stats_lst (:obj:`Class List[MinMaxStats]`):  a tool used to min-max normalize the q value.
         - results (:obj:`Class List`): the search results.
-        - is_reset_lst (:obj:`Class List`): the vector of is_reset nodes along the search path, where is_reset represents for whether the parent value prefix needs to be reset.
         - to_play (:obj:`Class List`):  the batch of which player is playing on this node.
     """
     for i in range(results.num):
-        # expand the leaf node
-        #  to_play: int, latent_state_index_in_search_path: int, latent_state_index_in_batch: int,
-        if to_play in [-1, None]:
+        # ****** expand the leaf node ******
+        if to_play is None:
             # set to_play=-1, because two_player mode to_play = {1,2}
-            results.nodes[i].expand(-1, latent_state_index_in_search_path, i, value_prefixs[i], policies[i])
+            results.nodes[i].expand(-1, latent_state_index_in_search_path, i, value_prefixs[i], policies[i],  is_chance_list[i])
         else:
-            results.nodes[i].expand(to_play[i], latent_state_index_in_search_path, i, value_prefixs[i], policies[i])
+            results.nodes[i].expand(to_play[i], latent_state_index_in_search_path, i, value_prefixs[i], policies[i], is_chance_list[i])
 
-        # reset
-        results.nodes[i].is_reset = is_reset_lst[i]
-        if to_play in [-1, None]:
-            backpropagate(results.search_paths[i], min_max_stats_lst.stats_lst[i], -1, values[i], discount_factor)
+        # ****** backpropagate ******
+        if to_play is None:
+            backpropagate(results.search_paths[i], min_max_stats_lst.stats_lst[i], 0, values[i], discount_factor)
         else:
             backpropagate(
                 results.search_paths[i], min_max_stats_lst.stats_lst[i], to_play[i], values[i], discount_factor

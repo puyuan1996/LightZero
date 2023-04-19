@@ -14,9 +14,9 @@ action_space_size = 4
 # max_env_step = int(1e6)
 # reanalyze_ratio = 0.
 
-collector_env_num = 1
-n_episode = 1
-evaluator_env_num = 1
+collector_env_num = 2
+n_episode = 2
+evaluator_env_num = 2
 num_simulations = 5
 update_per_collect = 3
 batch_size = 5
@@ -26,7 +26,7 @@ reanalyze_ratio = 0.
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
-atari_muzero_config = dict(
+game_2048_stochastic_muzero_config = dict(
     exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw2_rew-morm-true_seed0',
     env=dict(
         stop_value=int(1e6),
@@ -71,26 +71,26 @@ atari_muzero_config = dict(
         evaluator_env_num=evaluator_env_num,
     ),
 )
-atari_muzero_config = EasyDict(atari_muzero_config)
-main_config = atari_muzero_config
+game_2048_stochastic_muzero_config = EasyDict(game_2048_stochastic_muzero_config)
+main_config = game_2048_stochastic_muzero_config
 
-atari_muzero_create_config = dict(
+game_2048_stochastic_muzero_create_config = dict(
     env=dict(
         type='game_2048',
         import_names=['zoo.game_2048.envs.game_2048_env'],
     ),
     env_manager=dict(type='subprocess'),
     policy=dict(
-        type='muzero',
-        import_names=['lzero.policy.muzero'],
+        type='stochastic_muzero',
+        import_names=['lzero.policy.stochastic_muzero'],
     ),
     collector=dict(
         type='episode_muzero',
         import_names=['lzero.worker.muzero_collector'],
     )
 )
-atari_muzero_create_config = EasyDict(atari_muzero_create_config)
-create_config = atari_muzero_create_config
+game_2048_stochastic_muzero_create_config = EasyDict(game_2048_stochastic_muzero_create_config)
+create_config = game_2048_stochastic_muzero_create_config
 
 if __name__ == "__main__":
     from lzero.entry import train_muzero

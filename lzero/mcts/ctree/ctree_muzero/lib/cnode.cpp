@@ -74,27 +74,27 @@ namespace tree
         this->value_sum = 0;
         this->best_action = -1;
         this->to_play = 0;
-        this->latent_state_index_x = -1;
-        this->latent_state_index_y = -1;
+        this->latent_state_index_in_search_path = -1;
+        this->latent_state_index_in_batch = -1;
     }
 
     CNode::~CNode() {}
 
-    void CNode::expand(int to_play, int latent_state_index_x, int latent_state_index_y, float reward, const std::vector<float> &policy_logits)
+    void CNode::expand(int to_play, int latent_state_index_in_search_path, int latent_state_index_in_batch, float reward, const std::vector<float> &policy_logits)
     {
         /*
         Overview:
             Expand the child nodes of the current node.
         Arguments:
             - to_play: which player to play the game in the current node.
-            - latent_state_index_x: the index of hidden state vector of the current node.
-            - latent_state_index_y: the index of hidden state vector of the current node.
+            - latent_state_index_in_search_path: the index of hidden state vector of the current node.
+            - latent_state_index_in_batch: the index of hidden state vector of the current node.
             - reward: the reward of the current node.
             - policy_logits: the logit of the child nodes.
         */
         this->to_play = to_play;
-        this->latent_state_index_x = latent_state_index_x;
-        this->latent_state_index_y = latent_state_index_y;
+        this->latent_state_index_in_search_path = latent_state_index_in_search_path;
+        this->latent_state_index_in_batch = latent_state_index_in_batch;
         this->reward = reward;
 
         int action_num = policy_logits.size();
@@ -526,13 +526,13 @@ namespace tree
         }
     }
 
-    void cbatch_backpropagate(int latent_state_index_x, float discount_factor, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float> > &policies, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, std::vector<int> &to_play_batch)
+    void cbatch_backpropagate(int latent_state_index_in_search_path, float discount_factor, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float> > &policies, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, std::vector<int> &to_play_batch)
     {
         /*
         Overview:
             Expand the nodes along the search path and update the infos.
         Arguments:
-            - latent_state_index_x: the index of hidden state vector.
+            - latent_state_index_in_search_path: the index of hidden state vector.
             - discount_factor: the discount factor of reward.
             - value_prefixs: the value prefixs of nodes along the search path.
             - values: the values to propagate along the search path.
@@ -543,7 +543,7 @@ namespace tree
         */
         for (int i = 0; i < results.num; ++i)
         {
-            results.nodes[i]->expand(to_play_batch[i], latent_state_index_x, i, value_prefixs[i], policies[i]);
+            results.nodes[i]->expand(to_play_batch[i], latent_state_index_in_search_path, i, value_prefixs[i], policies[i]);
             cbackpropagate(results.search_paths[i], min_max_stats_lst->stats_lst[i], to_play_batch[i], values[i], discount_factor);
         }
     }
@@ -702,8 +702,8 @@ namespace tree
 
             CNode *parent = results.search_paths[i][results.search_paths[i].size() - 2];
 
-            results.latent_state_index_x_lst.push_back(parent->latent_state_index_x);
-            results.latent_state_index_y_lst.push_back(parent->latent_state_index_y);
+            results.latent_state_index_in_search_path.push_back(parent->latent_state_index_in_search_path);
+            results.latent_state_index_in_batch.push_back(parent->latent_state_index_in_batch);
 
             results.last_actions.push_back(last_action);
             results.search_lens.push_back(search_len);

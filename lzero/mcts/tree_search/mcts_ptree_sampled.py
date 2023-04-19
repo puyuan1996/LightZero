@@ -114,7 +114,7 @@ class SampledEfficientZeroMCTSPtree(object):
             reward_hidden_state_h_pool = [reward_hidden_state_roots[1]]
 
             # the index of each layer in the ctree
-            latent_state_index_x = 0
+            latent_state_index_in_search_path = 0
             # minimax value storage
             min_max_stats_lst = MinMaxStatsList(num)
 
@@ -130,15 +130,15 @@ class SampledEfficientZeroMCTSPtree(object):
                 # prepare a result wrapper to transport results between python and c++ parts
                 results = tree_sez.SearchResults(num=num)
 
-                # latent_state_index_x_lst: the first index of leaf node states in latent_state_pool, i.e. the search depth.
-                # latent_state_index_y_lst: the second index of leaf node states in latent_state_pool, i.e. the batch root node index, maximum is ``env_num``.
+                # latent_state_index_in_search_path: the first index of leaf node states in latent_state_pool, i.e. the search depth.
+                # latent_state_index_in_batch: the second index of leaf node states in latent_state_pool, i.e. the batch root node index, maximum is ``env_num``.
                 # the latent state of the leaf node is latent_state_pool[x, y].
                 # the index of value prefix hidden state of the leaf node are in the same manner.
                 """
                 MCTS stage 1: Selection
                     Each simulation starts from the internal root state s0, and finishes when the simulation reaches a leaf node s_l.
                 """
-                latent_state_index_x_lst, latent_state_index_y_lst, last_actions, virtual_to_play = tree_sez.batch_traverse(
+                latent_state_index_in_search_path, latent_state_index_in_batch, last_actions, virtual_to_play = tree_sez.batch_traverse(
                     roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst, results, copy.deepcopy(to_play),
                     self._cfg.model.continuous_action_space
                 )
@@ -146,7 +146,7 @@ class SampledEfficientZeroMCTSPtree(object):
                 search_lens = results.search_lens
 
                 # obtain the states for leaf nodes
-                for ix, iy in zip(latent_state_index_x_lst, latent_state_index_y_lst):
+                for ix, iy in zip(latent_state_index_in_search_path, latent_state_index_in_batch):
                     latent_states.append(hidden_state_pool[ix][iy])  # hidden_state_pool[ix][iy] shape (12,3,3)
                     hidden_states_c_reward.append(
                         reward_hidden_state_c_pool[ix][0][iy]
@@ -210,13 +210,13 @@ class SampledEfficientZeroMCTSPtree(object):
                 reward_hidden_state_c_pool.append(reward_latent_state_nodes[0])
                 reward_hidden_state_h_pool.append(reward_latent_state_nodes[1])
                 # increase the index of leaf node
-                latent_state_index_x += 1
+                latent_state_index_in_search_path += 1
                 """
                 MCTS stage 3: Backup
                     At the end of the simulation, the statistics along the trajectory are updated.
                 """
                 # backpropagation along the search path to update the attributes
                 tree_sez.batch_backpropagate(
-                    latent_state_index_x, discount_factor, value_prefix_pool, value_pool, policy_logits_pool,
+                    latent_state_index_in_search_path, discount_factor, value_prefix_pool, value_pool, policy_logits_pool,
                     min_max_stats_lst, results, is_reset_lst, virtual_to_play
                 )
