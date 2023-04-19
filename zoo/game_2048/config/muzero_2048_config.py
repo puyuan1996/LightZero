@@ -10,16 +10,15 @@ n_episode = 8
 evaluator_env_num = 3
 num_simulations = 50  # TODO(pu):100
 update_per_collect = 200
-# batch_size = 1024
 batch_size = 256
 max_env_step = int(1e6)
 reanalyze_ratio = 0.
 
 # collector_env_num = 1
-# n_episode = 3
+# n_episode = 1
 # evaluator_env_num = 1
 # num_simulations = 5
-# update_per_collect = 4
+# update_per_collect = 3
 # batch_size = 5
 # max_env_step = int(1e6)
 # reanalyze_ratio = 0.
@@ -28,7 +27,7 @@ reanalyze_ratio = 0.
 # ==============================================================
 
 atari_muzero_config = dict(
-    exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_adam_sslw2_rew-morm-true_seed0',
+    exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw2_rew-morm-true_seed0',
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,
