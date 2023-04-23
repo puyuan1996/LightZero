@@ -74,22 +74,22 @@ cdef class Node:
         pass
 
     @cython.binding
-    def expand(self, int to_play, int latent_state_index_in_search_path, int latent_state_index_in_batch, float value_prefix,
+    def expand(self, int to_play, int simulation_index, int batch_index, float value_prefix,
                list policy_logits):
         cdef vector[float] cpolicy = policy_logits
-        self.cnode.expand(to_play, latent_state_index_in_search_path, latent_state_index_in_batch, value_prefix, cpolicy)
+        self.cnode.expand(to_play, simulation_index, batch_index, value_prefix, cpolicy)
 
 @cython.binding
-def batch_backpropagate(int latent_state_index_in_search_path, float discount_factor, list value_prefixs, list values, list policies,
-                         MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list is_reset_lst,
+def batch_backpropagate(int simulation_index, float discount_factor, list value_prefixs, list values, list policies,
+                         MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list is_reset_list,
                          list to_play_batch):
     cdef int i
     cdef vector[float] cvalue_prefixs = value_prefixs
     cdef vector[float] cvalues = values
     cdef vector[vector[float]] cpolicies = policies
 
-    cbatch_backpropagate(index_of_simulation, discount_factor, cvalue_prefixs, cvalues, cpolicies,
-                          min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst, to_play_batch)
+    cbatch_backpropagate(simulation_index, discount_factor, cvalue_prefixs, cvalues, cpolicies,
+                          min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_list, to_play_batch)
 
 @cython.binding
 def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_factor, MinMaxStatsList min_max_stats_lst,
