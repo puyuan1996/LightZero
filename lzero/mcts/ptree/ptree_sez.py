@@ -42,7 +42,7 @@ class Node:
         self.value_prefix = 0.0
         self.children = {}
         self.children_index = []
-        self.latent_state_index_in_search_path = 0
+        self.index_of_simulation = 0
         self.latent_state_index_in_batch = 0
 
     def expand(

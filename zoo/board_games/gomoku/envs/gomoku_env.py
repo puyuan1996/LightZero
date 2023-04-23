@@ -313,6 +313,15 @@ class GomokuEnv(BaseEnv):
             reward = None
         return done, reward
 
+    # @property
+    # def legal_actions(self):
+    #     legal_actions = []
+    #     for i in range(self.board_size):
+    #         for j in range(self.board_size):
+    #             if self.board[i][j] == 0:
+    #                 legal_actions.append(self.coord_to_action(i, j))
+    #     return legal_actions
+
     @property
     def legal_actions(self):
         legal_actions = []

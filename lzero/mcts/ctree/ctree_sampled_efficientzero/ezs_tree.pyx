@@ -112,7 +112,7 @@ def batch_backpropagate(int latent_state_index_in_search_path, float discount_fa
     cdef vector[float] cvalues = values
     cdef vector[vector[float]] cpolicies = policies
 
-    cbatch_backpropagate(latent_state_index_in_search_path, discount_factor, cvalue_prefixs, cvalues, cpolicies,
+    cbatch_backpropagate(index_of_simulation, discount_factor, cvalue_prefixs, cvalues, cpolicies,
                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst, to_play_batch)
 
 def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_factor, MinMaxStatsList min_max_stats_lst,

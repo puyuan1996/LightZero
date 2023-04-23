@@ -99,7 +99,7 @@ class EfficientZeroMCTSCtree(object):
             reward_hidden_state_h_pool = [reward_hidden_state_roots[1]]
 
             # the index of each layer in the ctree
-            latent_state_index_in_search_path = 0
+            index_of_simulation = 0
             # minimax value storage
             min_max_stats_lst = tree_efficientzero.MinMaxStatsList(num)
             min_max_stats_lst.set_delta(self._cfg.value_delta_max)
@@ -179,14 +179,14 @@ class EfficientZeroMCTSCtree(object):
 
                 reward_hidden_state_c_pool.append(reward_latent_state_nodes[0])
                 reward_hidden_state_h_pool.append(reward_latent_state_nodes[1])
-                latent_state_index_in_search_path += 1
+                index_of_simulation += 1
                 """
                 MCTS stage 3: Backup
                     At the end of the simulation, the statistics along the trajectory are updated.
                 """
                 # backpropagation along the search path to update the attributes
                 tree_efficientzero.batch_backpropagate(
-                    latent_state_index_in_search_path, discount_factor, value_prefix_pool, value_pool, policy_logits_pool,
+                    index_of_simulation, discount_factor, value_prefix_pool, value_pool, policy_logits_pool,
                     min_max_stats_lst, results, is_reset_lst, virtual_to_play_batch
                 )
 
@@ -273,7 +273,7 @@ class MuZeroMCTSCtree(object):
             latent_state_pool = [latent_state_roots]
 
             # the index of each layer in the ctree
-            latent_state_index_in_search_path = 0
+            index_of_simulation = 0
             # minimax value storage
             min_max_stats_lst = tree_muzero.MinMaxStatsList(num)
             min_max_stats_lst.set_delta(self._cfg.value_delta_max)
@@ -326,13 +326,13 @@ class MuZeroMCTSCtree(object):
                 policy_logits_pool = network_output.policy_logits.tolist()
 
                 latent_state_pool.append(latent_state_nodes)
-                latent_state_index_in_search_path += 1
+                index_of_simulation += 1
                 """
                 MCTS stage 3: Backup
                     At the end of the simulation, the statistics along the trajectory are updated.
                 """
                 # backpropagation along the search path to update the attributes
                 tree_muzero.batch_backpropagate(
-                    latent_state_index_in_search_path, discount_factor, reward_pool, value_pool, policy_logits_pool,
+                    index_of_simulation, discount_factor, reward_pool, value_pool, policy_logits_pool,
                     min_max_stats_lst, results, virtual_to_play_batch
                 )

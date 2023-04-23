@@ -185,21 +185,43 @@ class Test2048Logic():
             [16, 2, 4, 8]]))
         assert game_2048_env.is_end() is True
 
+    def test_legal_actions(self):
+        game_2048_env = Game2048Env(config)
+        game_2048_env.reset()
+        # print('init board state: ')
+        # game_2048_env.render()
+        game_2048_env.set_board(np.array([
+            [2, 2, 2, 2],
+            [2, 2, 2, 2],
+            [2, 2, 2, 2],
+            [2, 2, 2, 2]]))
+        assert game_2048_env.legal_actions == [0, 1, 2, 3]
+
+        game_2048_env.set_board(np.array([
+            [2, 4, 8, 16],
+            [4, 8, 16, 2],
+            [8, 16, 2, 4],
+            [16, 2, 4, 8]]))
+        assert game_2048_env.legal_actions == []
+
 
 if __name__ == "__main__":
     game_2048_env = Game2048Env(config)
     game_2048_env.reset()
-    print('init board state: ')
-    game_2048_env.render()
     step = 0
     while True:
         # action = env.human_to_action()
         print('='*20)
+        game_2048_env.render()
+        print("legal_actions: ", game_2048_env.legal_actions)
         action = game_2048_env.random_action()
         obs, reward, done, info = game_2048_env.step(action)
-        game_2048_env.render()
-        step += 1
         print(f"step: {step}, action: {action}, reward: {reward}, raw_reward: {info['raw_reward']}")
+        step += 1
         if done:
-            print('total_step_number: {}'.format(step))
+            print('=' * 20)
+            print('done')
+            game_2048_env.render()
+            print("legal_actions: ", game_2048_env.legal_actions)
+            print('episode_length: {}'.format(step))
             break
