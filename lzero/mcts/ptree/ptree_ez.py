@@ -539,11 +539,7 @@ def backpropagate(
 
 
 def batch_backpropagate(
-<<<<<<< HEAD
-        latent_state_index_in_search_path: int,
-=======
         simulation_index: int,
->>>>>>> 23b085124e170fc08d8102eb4092bf9934e28b02
         discount_factor: float,
         value_prefixs: List,
         values: List[float],
