@@ -66,32 +66,19 @@ cdef class Node:
     def __cinit__(self, float prior, vector[int] & legal_actions):
         pass
 
-<<<<<<< HEAD
-    def expand(self, int to_play, int latent_state_index_in_search_path, int latent_state_index_in_batch, float value_prefix,
-               list policy_logits):
-        cdef vector[float] cpolicy = policy_logits
-        self.cnode.expand(to_play, latent_state_index_in_search_path, latent_state_index_in_batch, value_prefix, cpolicy)
-
-def batch_backpropagate(int latent_state_index_in_search_path, float discount_factor, list value_prefixs, list values, list policies,
-=======
     def expand(self, int to_play, int simulation_index, int batch_index, float value_prefix,
                list policy_logits):
         cdef vector[float] cpolicy = policy_logits
         self.cnode.expand(to_play, simulation_index, batch_index, value_prefix, cpolicy)
 
 def batch_backpropagate(int simulation_index, float discount_factor, list value_prefixs, list values, list policies,
->>>>>>> 23b085124e170fc08d8102eb4092bf9934e28b02
                          MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_play_batch):
     cdef int i
     cdef vector[float] cvalue_prefixs = value_prefixs
     cdef vector[float] cvalues = values
     cdef vector[vector[float]] cpolicies = policies
 
-<<<<<<< HEAD
-    cbatch_backpropagate(index_of_simulation, discount_factor, cvalue_prefixs, cvalues, cpolicies,
-=======
     cbatch_backpropagate(simulation_index, discount_factor, cvalue_prefixs, cvalues, cpolicies,
->>>>>>> 23b085124e170fc08d8102eb4092bf9934e28b02
                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, to_play_batch)
 
 def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_factor, MinMaxStatsList min_max_stats_lst,

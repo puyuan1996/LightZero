@@ -86,7 +86,11 @@ namespace tree
     CNode::~CNode() {}
 
     void CNode::expand(int to_play, int simulation_index, int batch_index, float value_prefix, const std::vector<float> &policy_logits)
+    {
+        /*
+        Overview:
             Expand the child nodes of the current node.
+        Arguments:
             - to_play: which player to play the game in the current node.
             - simulation_index: the x/first index of hidden state vector of the current node, i.e. the search depth.
             - batch_index: the y/second index of hidden state vector of the current node, i.e. the index of batch root node, its maximum is ``batch_size``/``env_num``.
