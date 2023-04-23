@@ -8,10 +8,12 @@ action_space_size = 4
 collector_env_num = 8
 n_episode = 8
 evaluator_env_num = 3
-num_simulations = 50  # TODO(pu):100
+num_simulations = 100  # TODO(pu):100
 update_per_collect = 200
-batch_size = 256
-max_env_step = int(1e6)
+# batch_size = 256
+batch_size = 1024
+
+max_env_step = int(5e6)
 reanalyze_ratio = 0.
 
 # collector_env_num = 1
@@ -27,15 +29,18 @@ reanalyze_ratio = 0.
 # ==============================================================
 
 atari_muzero_config = dict(
-    exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw2_rew-morm-true_seed0',
+    exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw0_rew-morm-false_mtd_sgd02_seed0',
+    # exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw0_rew-morm-false_mtd_adam3e-4_seed0',
+
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,
         obs_shape=(16, 4, 4),
         obs_type='dict_observation',
-        reward_normalize=True,
+        # reward_normalize=True,
+        reward_normalize=False,
         reward_scale=100,
-        max_tile=int(2**16),  # 2**11=2048, 2**16=65536
+        max_tile=int(2 ** 16),  # 2**11=2048, 2**16=65536
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
         n_evaluator_episode=evaluator_env_num,
@@ -57,12 +62,20 @@ atari_muzero_config = dict(
         batch_size=batch_size,
         td_steps=10,
         discount_factor=0.999,
+
+        manual_temperature_decay=True,
+
         optim_type='SGD',
         lr_piecewise_constant_decay=True,
         learning_rate=0.2,  # init lr for manually decay schedule
+
+        # optim_type='Adam',
+        # lr_piecewise_constant_decay=True,
+        # learning_rate=0.0003,  # init lr for manually decay schedule
+
         num_simulations=num_simulations,
         reanalyze_ratio=reanalyze_ratio,
-        ssl_loss_weight=2,  # default is 0
+        ssl_loss_weight=0,  # default is 0
         n_episode=n_episode,
         eval_freq=int(2e3),
         replay_buffer_size=int(1e6),  # the size/capacity of replay_buffer, in the terms of transitions.
@@ -93,4 +106,5 @@ create_config = atari_muzero_create_config
 
 if __name__ == "__main__":
     from lzero.entry import train_muzero
+
     train_muzero([main_config, create_config], seed=0, max_env_step=max_env_step)
