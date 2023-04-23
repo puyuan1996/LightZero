@@ -172,10 +172,12 @@ class Game2048Env(gym.Env):
 
         if self.reward_normalize:
             reward_normalize = reward / self.reward_scale
+            self._final_eval_reward += reward_normalize
+        else:
+            self._final_eval_reward += reward
 
         info = {"raw_reward": reward, "max_tile": self.highest(), 'highest': self.highest()}
 
-        self._final_eval_reward += reward
         if done:
             info['eval_episode_return'] = self._final_eval_reward
 
@@ -418,7 +420,6 @@ class Game2048Env(gym.Env):
 
         if self.max_tile is not None and self.highest() == self.max_tile:
             return True
-
         elif len(self.legal_actions) == 0:
             # the agent don't have legal_actions to move, so the episode is done
             return True
