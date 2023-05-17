@@ -35,6 +35,7 @@ class Game2048Env(gym.Env):
         prob_random_agent=0.,
         max_episode_steps=int(1e4),
         is_collect=True,
+        is_encode_boarding=True,
     )
     metadata = {'render.modes': ['human', 'ansi', 'rgb_array']}
 
@@ -59,6 +60,7 @@ class Game2048Env(gym.Env):
         self.max_tile = cfg.max_tile
         self.max_episode_steps = cfg.max_episode_steps
         self.is_collect = cfg.is_collect
+        self.is_encode_boarding = cfg.is_encode_boarding
 
         self.size = 4
         self.w = self.size
@@ -120,8 +122,11 @@ class Game2048Env(gym.Env):
         # observation = copy.deepcopy(self.board)
         # observation = observation.reshape(self.h, self.w, 1)
         action_mask = np.ones(4, 'int8')
-        observation = encoding_board(self.board)
-        assert observation.shape == (4, 4, 16)
+        if self.is_encode_boarding:
+            observation = encoding_board(self.board)
+            assert observation.shape == (4, 4, 16)
+        else:
+            observation = self.board 
 
         if not self.channel_last:
             # move channel dim to fist axis
@@ -160,8 +165,11 @@ class Game2048Env(gym.Env):
             # print("episode_length: {}".format(self.episode_length))
             done = True
 
-        observation = encoding_board(self.board)
-        assert observation.shape == (4, 4, 16)
+        if self.is_encode_boarding:
+            observation = encoding_board(self.board)
+            assert observation.shape == (4, 4, 16)
+        else:
+            observation = self.board 
 
         if not self.channel_last:
             # move channel dim to fist axis

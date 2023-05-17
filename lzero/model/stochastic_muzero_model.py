@@ -128,7 +128,7 @@ class StochasticMuZeroModel(nn.Module):
         )
         
         self.encoder = Encoder_function(
-            observation_shape, 4
+            observation_shape, action_space_size
         )
         self.dynamics_network = DynamicsNetwork(
             num_res_blocks,
@@ -773,14 +773,15 @@ class ImgNet(nn.Module):
         super(ImgNet, self).__init__()
         self.conv1 = nn.Conv2d(observation_space_dimensions[0], 32, 3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
-        self.fc1 = nn.Linear(64 * 4 * 4, 128)
+        self.fc1 = nn.Linear(64 * observation_space_dimensions[1] * observation_space_dimensions[2], 128)
         self.fc2 = nn.Linear(128, 64)
         self.fc3 = nn.Linear(64, table_vec_dim)
 
     def forward(self, x):
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
-        x = x.view(-1, 64 * 4 * 4)
+        # x = x.view(-1, 64 * 4 * 4)
+        x = x.view(x.shape[0], -1)
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         x = self.fc3(x)
