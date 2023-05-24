@@ -333,7 +333,7 @@ class StochasticMuZeroPolicy(Policy):
             chance_code, encode_output = self._learn_model._encode_vqvae(encoder_image_list[step_i])
             chance_code_long = torch.argmax(chance_code, dim=1).long().unsqueeze(-1)
             
-            network_output = self._learn_model.recurrent_inference(hidden_state, chance_code_long,latent_to_afterstate=True)
+            network_output = self._learn_model.recurrent_inference(a_hidden_state, chance_code_long,latent_to_afterstate=True)
             hidden_state, reward, value, policy_logits = mz_network_output_unpack(network_output)
 
             # transform the scaled value or its categorical representation to its original value,
