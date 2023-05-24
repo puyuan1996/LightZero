@@ -35,7 +35,7 @@ class Game2048Env(gym.Env):
         prob_random_agent=0.,
         max_episode_steps=int(1e4),
         is_collect=True,
-        ignore_legal_actions = False,
+        is_encode_boarding=True,
     )
     metadata = {'render.modes': ['human', 'ansi', 'rgb_array']}
 
@@ -60,14 +60,12 @@ class Game2048Env(gym.Env):
         self.max_tile = cfg.max_tile
         self.max_episode_steps = cfg.max_episode_steps
         self.is_collect = cfg.is_collect
-        self.ignore_legal_actions = cfg.ignore_legal_actions
+        self.is_encode_boarding = cfg.is_encode_boarding
 
         self.size = 4
         self.w = self.size
         self.h = self.size
         self.squares = self.size * self.size
-
-        self.max_value = 2
 
         self.episode_return = 0
         # Members for gym implementation:
@@ -78,7 +76,7 @@ class Game2048Env(gym.Env):
         self.set_max_tile(max_tile=self.max_tile)
 
         if self.reward_normalize:
-            self._reward_range = (0., self.max_tile)
+            self._reward_range = (0., 1)
         else:
             self._reward_range = (0., self.max_tile)
 
@@ -116,20 +114,19 @@ class Game2048Env(gym.Env):
         self.board = np.zeros((self.h, self.w), np.int32)
         self.episode_return = 0
         self._final_eval_reward = 0.0
-        self.should_done = False
-        self.max_value = 2
 
         logging.debug("Adding tiles")
         # TODO(pu): why add_tiles twice?
         self.add_random_2_4_tile()
         self.add_random_2_4_tile()
-
-        action_mask = np.zeros(4, 'int8')
-        action_mask[self.legal_actions] = 1
-
-        observation = encoding_board(self.board)
-        observation = observation.astype(np.float32)
-        assert observation.shape == (4, 4, 16)
+        # observation = copy.deepcopy(self.board)
+        # observation = observation.reshape(self.h, self.w, 1)
+        action_mask = np.ones(4, 'int8')
+        if self.is_encode_boarding:
+            observation = encoding_board(self.board)
+            assert observation.shape == (4, 4, 16)
+        else:
+            observation = self.board 
 
         if not self.channel_last:
             # move channel dim to fist axis
@@ -145,35 +142,34 @@ class Game2048Env(gym.Env):
     def step(self, action):
         """Perform one step of the game. This involves moving and adding a new tile."""
         self.episode_length += 1
+        logging.debug("Action {}".format(action))
         info = {'illegal_move': False}
-
-        if action not in self.legal_actions:
-            raise IllegalActionError(f"You input illegal action: {action}, the legal_actions are {self.legal_actions}. ")
-        
-        empty_num1 = len(self.get_empty_location())
-        reward_eval = float(self.move(action))
-        empty_num2 = len(self.get_empty_location())
-        reward_collect = float(empty_num2 - empty_num1)
-        #reward_collect = float(empty_num1 - empty_num2)
-        max_num = np.max(self.board)
-        if max_num > self.max_value:
-            reward_collect += np.log2(max_num) * 0.1
-            self.max_value = max_num
-        self.episode_return += reward_eval
-        assert reward_eval <= 2 ** (self.w * self.h)
-        self.add_random_2_4_tile()
-        done = self.is_end()
-        reward_collect = float(reward_collect)
-        reward_eval = float(reward_eval)
+        try:
+            reward = float(self.move(action))
+            self.episode_return += reward
+            assert reward <= 2 ** (self.w * self.h)
+            self.add_random_2_4_tile()
+            done = self.is_end()
+            reward = float(reward)
+        except IllegalMove as e:
+            logging.debug("Illegal move")
+            info['illegal_move'] = True
+            if self.is_collect:
+                done = False
+            else:
+                # TODO(pu): if illegal move, should we return done=True?
+                done = True
+            reward = self.illegal_move_reward
 
         if self.episode_length >= self.max_episode_steps:
             # print("episode_length: {}".format(self.episode_length))
             done = True
 
-        observation = encoding_board(self.board)
-        observation = observation.astype(np.float32)
-        
-        assert observation.shape == (4, 4, 16)
+        if self.is_encode_boarding:
+            observation = encoding_board(self.board)
+            assert observation.shape == (4, 4, 16)
+        else:
+            observation = self.board 
 
         if not self.channel_last:
             # move channel dim to fist axis
@@ -181,28 +177,21 @@ class Game2048Env(gym.Env):
             # e.g. (4, 4, 16) -> (16, 4, 4)
             observation = np.transpose(observation, [2, 0, 1])
 
-        action_mask = np.zeros(4, 'int8')
-        action_mask[self.legal_actions] = 1
-
+        action_mask = np.ones(4, 'int8')
         if self.obs_type == 'dict_observation':
             observation = {'observation': observation, 'action_mask': action_mask, 'to_play': -1}
 
         if self.reward_normalize:
-            reward_normalize = reward_collect
-            self._final_eval_reward += reward_normalize
-            reward = reward_collect
-        else:
-            self._final_eval_reward += reward_eval
-            reward = reward_eval
-        reward = to_ndarray([reward]).astype(np.float32) 
+            reward_normalize = reward / self.reward_scale
 
         info = {"raw_reward": reward, "max_tile": self.highest(), 'highest': self.highest()}
 
+        self._final_eval_reward += reward
         if done:
             info['eval_episode_return'] = self._final_eval_reward
 
         if self.reward_normalize:
-            return BaseEnvTimestep(observation, reward, done, info)
+            return BaseEnvTimestep(observation, reward_normalize, done, info)
         else:
             return BaseEnvTimestep(observation, reward, done, info)
 
@@ -263,10 +252,7 @@ class Game2048Env(gym.Env):
         tile_probabilities = np.array([0.9, 0.1])
         val = self.np_random.choice(possible_tiles, 1, p=tile_probabilities)[0]
         empty_location = self.get_empty_location()
-        # assert empty_location.shape[0]
-        if empty_location.shape[0] == 0:
-            self.should_done = True  
-            return 
+        assert empty_location.shape[0]
         empty_idx = self.np_random.choice(empty_location.shape[0])
         empty = empty_location[empty_idx]
         logging.debug("Adding %s at %s", val, (empty[0], empty[1]))
@@ -312,8 +298,7 @@ class Game2048Env(gym.Env):
         move_reward = 0
         dir_div_two = int(direction / 2)
         dir_mod_two = int(direction % 2)
-        # 0 for towards up or left, 1 for towards bottom or right
-        shift_direction = dir_mod_two ^ dir_div_two
+        shift_direction = dir_mod_two ^ dir_div_two  # 0 for towards up left, 1 for towards bottom right
 
         # Construct a range for extracting row/column into a list
         rx = list(range(self.w))
@@ -341,57 +326,10 @@ class Game2048Env(gym.Env):
                     if not trial:
                         for y in ry:
                             self.set(x, y, new[y])
-        # if not changed:
-        #     raise IllegalMove
+        if not changed:
+            raise IllegalMove
 
         return move_reward
-
-    @property
-    def legal_actions(self):
-        """
-        Overview:
-            Return the legal actions for the current state.
-        Arguments:
-            - None
-        Returns:
-            - legal_actions (:obj:`list`): The legal actions.
-        """
-        if self.ignore_legal_actions:
-            return [0,1,2,3]
-        legal_actions = []
-        for direction in range(4):
-            changed = False
-            move_reward = 0
-            dir_div_two = int(direction / 2)
-            dir_mod_two = int(direction % 2)
-            # 0 for towards up or left, 1 for towards bottom or right
-            shift_direction = dir_mod_two ^ dir_div_two
-
-            # Construct a range for extracting row/column into a list
-            rx = list(range(self.w))
-            ry = list(range(self.h))
-
-            if dir_mod_two == 0:
-                # Up or down, split into columns
-                for y in range(self.h):
-                    old = [self.get(x, y) for x in rx]
-                    (new, move_reward_tmp) = self.shift(old, shift_direction)
-                    move_reward += move_reward_tmp
-                    if old != new:
-                        changed = True
-            else:
-                # Left or right, split into rows
-                for x in range(self.w):
-                    old = [self.get(x, y) for y in ry]
-                    (new, move_reward_tmp) = self.shift(old, shift_direction)
-                    move_reward += move_reward_tmp
-                    if old != new:
-                        changed = True
-
-            if changed:
-                legal_actions.append(direction)
-
-        return legal_actions
 
     def combine(self, shifted_row):
         """Combine same tiles when moving to one side. This function always
@@ -445,13 +383,15 @@ class Game2048Env(gym.Env):
 
         if self.max_tile is not None and self.highest() == self.max_tile:
             return True
-        elif len(self.legal_actions) == 0:
-            # the agent don't have legal_actions to move, so the episode is done
-            return True
-        elif self.should_done:
-            return True
-        else:
-            return False
+
+        for direction in range(4):
+            try:
+                self.move(direction, trial=True)
+                # Not the end if we can do any move
+                return False
+            except IllegalMove:
+                pass
+        return True
 
     def get_board(self):
         """Get the whole board-matrix, useful for testing."""
@@ -486,7 +426,7 @@ class Game2048Env(gym.Env):
         collector_env_num = cfg.pop('collector_env_num')
         cfg = copy.deepcopy(cfg)
         # when collect data, sometimes we need to normalize the reward
-        # reward_normalize is determined by the config.
+        # reward_normalize is determined by the config
         cfg.is_collect = True
         return [cfg for _ in range(collector_env_num)]
 
@@ -494,7 +434,7 @@ class Game2048Env(gym.Env):
     def create_evaluator_env_cfg(cfg: dict) -> List[dict]:
         evaluator_env_num = cfg.pop('evaluator_env_num')
         cfg = copy.deepcopy(cfg)
-        # when evaluate, we don't need to normalize the reward.
+        # when evaluate, we don't need to normalize the reward
         cfg.reward_normalize = False
         cfg.is_collect = False
         return [cfg for _ in range(evaluator_env_num)]
@@ -513,8 +453,6 @@ def pairwise(iterable):
 class IllegalMove(Exception):
     pass
 
-class IllegalActionError(Exception):
-    pass
 
 def encoding_board(flat, num_of_template_tiles=16):
     """
@@ -528,9 +466,7 @@ def encoding_board(flat, num_of_template_tiles=16):
     """
     # TODO(pu): the more elegant one-hot encoding implementation
     # template_tiles is what each layer represents
-    # template_tiles = 2 ** (np.arange(num_of_template_tiles, dtype=int) + 1)
-    template_tiles = 2 ** (np.arange(num_of_template_tiles, dtype=int))
-    template_tiles[0] = 0
+    template_tiles = 2 ** (np.arange(num_of_template_tiles, dtype=int) + 1)
     # layered is the flat board repeated num_of_template_tiles times
     layered = np.repeat(flat[:, :, np.newaxis], num_of_template_tiles, axis=-1)
 
