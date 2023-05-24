@@ -313,6 +313,10 @@ class StochasticMuZeroPolicy(Policy):
 
         reward_loss = torch.zeros(self._cfg.batch_size, device=self._cfg.device)
         consistency_loss = torch.zeros(self._cfg.batch_size, device=self._cfg.device)
+        
+        afterstate_policy_loss = torch.zeros(self._cfg.batch_size, device=self._cfg.device)
+        afterstate_value_loss = torch.zeros(self._cfg.batch_size, device=self._cfg.device)
+        commitment_loss = torch.zeros(self._cfg.batch_size, device=self._cfg.device)
 
         gradient_scale = 1 / self._cfg.num_unroll_steps
 
@@ -369,10 +373,10 @@ class StochasticMuZeroPolicy(Policy):
             # NOTE: the +=.
             # ==============================================================
             policy_loss += cross_entropy_loss(policy_logits, target_policy[:, step_i + 1])
-            policy_loss = cross_entropy_loss(a_policy_logits, chance_code)
-            policy_loss += cross_entropy_loss(encode_output, chance_code)
+            afterstate_policy_loss += cross_entropy_loss(a_policy_logits, chance_code)
+            commitment_loss += cross_entropy_loss(encode_output, chance_code)
 
-            value_loss += cross_entropy_loss(a_value, target_value_categorical[:, step_i])
+            afterstate_value_loss += cross_entropy_loss(a_value, target_value_categorical[:, step_i])
             value_loss += cross_entropy_loss(value, target_value_categorical[:, step_i + 1])
             reward_loss += cross_entropy_loss(reward, target_reward_categorical[:, step_i])
 
@@ -397,6 +401,9 @@ class StochasticMuZeroPolicy(Policy):
         loss = (
             self._cfg.ssl_loss_weight * consistency_loss + self._cfg.policy_loss_weight * policy_loss +
             self._cfg.value_loss_weight * value_loss + self._cfg.reward_loss_weight * reward_loss
+            + self._cfg.policy_loss_weight * afterstate_policy_loss + self._cfg.value_loss_weight * afterstate_value_loss
+            + self._cfg.policy_loss_weight * commitment_loss
+            
         )
         weighted_total_loss = (weights * loss).mean()
 
@@ -419,7 +426,9 @@ class StochasticMuZeroPolicy(Policy):
         # packing loss info for tensorboard logging
         loss_info = (
             weighted_total_loss.item(), loss.mean().item(), policy_loss.mean().item(), reward_loss.mean().item(),
-            value_loss.mean().item(), consistency_loss.mean()
+            value_loss.mean().item(), consistency_loss.mean(), afterstate_policy_loss.mean().item(), 
+            afterstate_value_loss.mean().item(), commitment_loss.mean().item(),
+            
         )
         if self._cfg.monitor_extra_statistics:
             predicted_rewards = torch.stack(predicted_rewards).transpose(1, 0).squeeze(-1)
@@ -449,6 +458,9 @@ class StochasticMuZeroPolicy(Policy):
             'reward_loss': loss_info[3],
             'value_loss': loss_info[4],
             'consistency_loss': loss_info[5] / self._cfg.num_unroll_steps,
+            'afterstate_policy_loss': loss_info[6],
+            'afterstate_value_loss': loss_info[7],
+            'commitment_loss': loss_info[8],
 
             # ==============================================================
             # priority related
@@ -673,6 +685,9 @@ class StochasticMuZeroPolicy(Policy):
             'reward_loss',
             'value_loss',
             'consistency_loss',
+            'afterstate_policy_loss',
+            'commitment_loss',
+            'afterstate_value_loss',
             'value_priority',
             'target_reward',
             'target_value',
