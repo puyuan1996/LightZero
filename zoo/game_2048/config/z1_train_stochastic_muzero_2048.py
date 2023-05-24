@@ -35,7 +35,6 @@ game_2048_stochastic_muzero_config = dict(
         obs_type='dict_observation',
         reward_normalize=True,
         reward_scale=100,
-        reward_normalize=True,
         max_tile=int(2**16),  # 2**11=2048, 2**16=65536
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
