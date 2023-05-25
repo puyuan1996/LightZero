@@ -1,41 +1,41 @@
 from easydict import EasyDict
 
-env_name = 'game_2048'
-action_space_size = 4
+# options={'PongNoFrameskip-v4', 'QbertNoFrameskip-v4', 'MsPacmanNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4', 'BreakoutNoFrameskip-v4', ...}
+env_name = 'PongNoFrameskip-v4'
+
+if env_name == 'PongNoFrameskip-v4':
+    action_space_size = 6
+elif env_name == 'QbertNoFrameskip-v4':
+    action_space_size = 6
+elif env_name == 'MsPacmanNoFrameskip-v4':
+    action_space_size = 9
+elif env_name == 'SpaceInvadersNoFrameskip-v4':
+    action_space_size = 6
+elif env_name == 'BreakoutNoFrameskip-v4':
+    action_space_size = 4
+
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-# collector_env_num = 8
-# n_episode = 8
-# evaluator_env_num = 3
-# num_simulations = 50  # TODO(pu):100
-# update_per_collect = 200
-# batch_size = 256
-# max_env_step = int(1e6)
-# reanalyze_ratio = 0.
-
 collector_env_num = 1
-n_episode = 2
+n_episode = 8
 evaluator_env_num = 1
-num_simulations = 5
-update_per_collect = 3
-batch_size = 5
+num_simulations =10
+update_per_collect = 10
+batch_size = 64
 max_env_step = int(1e6)
 reanalyze_ratio = 0.
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
-game_2048_stochastic_muzero_config = dict(
-    exp_name=f'data_mz_ctree/game_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw2_rew-morm-true_seed0',
+atari_muzero_config = dict(
+    exp_name=
+    f'data_mz_ctree/{env_name[:-14]}_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_seed0',
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,
-        obs_shape=(16, 4, 4),
-        obs_type='dict_observation',
-        reward_normalize=True,
-        reward_scale=100,
-        max_tile=int(2**16),  # 2**11=2048, 2**16=65536
+        obs_shape=(4, 96, 96),
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
         n_evaluator_episode=evaluator_env_num,
@@ -43,24 +43,24 @@ game_2048_stochastic_muzero_config = dict(
     ),
     policy=dict(
         model=dict(
-            observation_shape=(16, 4, 4),
+            observation_shape=(4, 96, 96),
+            frame_stack_num=4,
             action_space_size=action_space_size,
-            image_channel=16,
-            # NOTE: whether to use the self_supervised_learning_loss. default is False
-            self_supervised_learning_loss=True,
+            downsample=True,
+            self_supervised_learning_loss=True,  # default is False
+            discrete_action_encoding_type='one_hot',
+            norm_type='BN', 
         ),
-        mcts_ctree=False,
         cuda=True,
+        mcts_ctree=False,
         env_type='not_board_games',
-        game_segment_length=200,
+        game_segment_length=400,
+        use_augmentation=True,
         update_per_collect=update_per_collect,
         batch_size=batch_size,
-        td_steps=10,
-        discount_factor=0.999,
-        manual_temperature_decay=True,
         optim_type='SGD',
         lr_piecewise_constant_decay=True,
-        learning_rate=0.2,  # init lr for manually decay schedule
+        learning_rate=0.2,
         num_simulations=num_simulations,
         reanalyze_ratio=reanalyze_ratio,
         ssl_loss_weight=2,  # default is 0
@@ -71,13 +71,13 @@ game_2048_stochastic_muzero_config = dict(
         evaluator_env_num=evaluator_env_num,
     ),
 )
-game_2048_stochastic_muzero_config = EasyDict(game_2048_stochastic_muzero_config)
-main_config = game_2048_stochastic_muzero_config
+atari_muzero_config = EasyDict(atari_muzero_config)
+main_config = atari_muzero_config
 
-game_2048_stochastic_muzero_create_config = dict(
+atari_muzero_create_config = dict(
     env=dict(
-        type='game_2048',
-        import_names=['zoo.game_2048.envs.game_2048_env'],
+        type='atari_lightzero',
+        import_names=['zoo.atari.envs.atari_lightzero_env'],
     ),
     env_manager=dict(type='subprocess'),
     policy=dict(
@@ -89,8 +89,8 @@ game_2048_stochastic_muzero_create_config = dict(
         import_names=['lzero.worker.muzero_collector'],
     )
 )
-game_2048_stochastic_muzero_create_config = EasyDict(game_2048_stochastic_muzero_create_config)
-create_config = game_2048_stochastic_muzero_create_config
+atari_muzero_create_config = EasyDict(atari_muzero_create_config)
+create_config = atari_muzero_create_config
 
 if __name__ == "__main__":
     from lzero.entry import train_muzero
