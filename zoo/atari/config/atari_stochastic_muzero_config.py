@@ -52,6 +52,7 @@ atari_muzero_config = dict(
             norm_type='BN', 
         ),
         cuda=True,
+        mcts_ctree=False,
         env_type='not_board_games',
         game_segment_length=400,
         use_augmentation=True,
