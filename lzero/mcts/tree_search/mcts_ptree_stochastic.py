@@ -157,7 +157,7 @@ class StochasticMuZeroMCTSPtree(object):
                         # The last action or outcome is a chance outcome.
                         network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
                                                                    last_actions[i].unsqueeze(0),
-                                                                   latent_to_afterstate=True)
+                                                                   afterstate=False)
 
                         # child_state = network_output.dynamics(parent.state, history.last_action_or_outcome())
                         # network_output = network_output.predictions(child_state)
@@ -184,13 +184,13 @@ class StochasticMuZeroMCTSPtree(object):
 
                         network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
                                                                    last_actions[i].unsqueeze(0),
-                                                                   latent_to_afterstate=False)
+                                                                   afterstate=True)
 
                         # child_state = network_output.afterstate_dynamics(parent.state, history.last_action_or_outcome())
                         # network_output = network_output.afterstate_predictions(child_state)
 
                         # The child is a chance node.
-                        is_child_chance_batch[i] = True
+                        is_child_chance_batch[i] = False
 
                         if not model.training:
                             # if not in training, obtain the scalars of the value/reward
