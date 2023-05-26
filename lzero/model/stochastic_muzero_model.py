@@ -233,7 +233,7 @@ class StochasticMuZeroModel(nn.Module):
             latent_state,
         )
 
-    def recurrent_inference(self, latent_state: torch.Tensor, action: torch.Tensor, latent_to_afterstate: bool = False) -> MZNetworkOutput:
+    def recurrent_inference(self, state: torch.Tensor, option: torch.Tensor, afterstate: bool = False) -> MZNetworkOutput:
         """
         Overview:
             Recurrent inference of MuZero model, which is the rollout step of the MuZero model.
@@ -242,9 +242,9 @@ class StochasticMuZeroModel(nn.Module):
             We then use the prediction network to predict the ``value`` and ``policy_logits`` of the current
             ``latent_state``.
         Arguments:
-            - latent_state (:obj:`torch.Tensor`): The encoding latent state of input state.
-            - action (:obj:`torch.Tensor`): The predicted action to rollout.
-            - afterstate_to_latent_state (:obj:`bool`): Whether to use the afterstate to predict the latent state.
+            - state (:obj:`torch.Tensor`): The encoding latent state of input state or the afterstate.
+            - option (:obj:`torch.Tensor`):  The action to rollout or the chance to predict next latent state.
+            - afterstate (:obj:`bool`): Whether to use afterstate prediction network to predict next latent state.
         Returns (MZNetworkOutput):
             - value (:obj:`torch.Tensor`): The output value of input state to help policy improvement and evaluation.
             - reward (:obj:`torch.Tensor`): The predicted reward of input state and selected action.
@@ -262,15 +262,17 @@ class StochasticMuZeroModel(nn.Module):
             - next_latent_state (:obj:`torch.Tensor`): :math:`(B, H_, W_)`, where B is batch_size, H_ is the height of \
                 latent state, W_ is the width of latent state.
          """
-        # in fact i do not know the meaning of afterstate_to_latent_state,
-        # i just think it is the afterstate label,
-        if not latent_to_afterstate:
-            next_latent_state, reward = self._afterstate_dynamics(latent_state, action)
-            policy_logits, value = self._afterstate_prediction(next_latent_state)   
-            return MZNetworkOutput(value, reward, policy_logits, next_latent_state)         
-        next_latent_state, reward = self._dynamics(latent_state, action)
-        policy_logits, value = self._prediction(next_latent_state)
-        return MZNetworkOutput(value, reward, policy_logits, next_latent_state)
+
+        if afterstate:
+            # state is afterstate, option is chance
+            next_latent_state, reward = self._dynamics(state, option)
+            policy_logits, value = self._prediction(next_latent_state)
+            return MZNetworkOutput(value, reward, policy_logits, next_latent_state)
+        else:
+            # state is latent_state, option is action
+            next_afterstate, reward = self._afterstate_dynamics(state, option)
+            policy_logits, value = self._afterstate_prediction(next_afterstate)
+            return MZNetworkOutput(value, reward, policy_logits, next_afterstate)
 
     def _representation(self, observation: torch.Tensor) -> torch.Tensor:
         """
@@ -311,7 +313,7 @@ class StochasticMuZeroModel(nn.Module):
         """
         return self.prediction_network(latent_state)
 
-    def _afterstate_prediction(self, latent_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _afterstate_prediction(self, afterstate: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Overview:
             Use the prediction network to predict ``policy_logits`` and ``value``.
@@ -326,7 +328,7 @@ class StochasticMuZeroModel(nn.Module):
             - policy_logits (:obj:`torch.Tensor`): :math:`(B, action_dim)`, where B is batch_size.
             - value (:obj:`torch.Tensor`): :math:`(B, value_support_size)`, where B is batch_size.
         """
-        return self.afterstate_prediction_network(latent_state)
+        return self.afterstate_prediction_network(afterstate)
 
     def _dynamics(self, latent_state: torch.Tensor, action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
