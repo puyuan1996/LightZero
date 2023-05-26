@@ -100,24 +100,21 @@ class StochasticMuZeroMCTSPtree(object):
             latent_state_batch_in_search_path = [latent_state_roots]
 
             # the index of each layer in the ctree
-            index_of_simulation = 0
+            current_latent_state_index = 0
             # minimax value storage
             min_max_stats_lst = MinMaxStatsList(num)
 
-            # virtual_to_play = copy.deepcopy(to_play)
-            for index_simulation in range(self._cfg.num_simulations):
-                """
-                each simulation, we expanded a new node, so we have `num_simulations)` num of node at most
-                """
+            for simulation_index in range(self._cfg.num_simulations):
+                # In each simulation, we expanded a new node, so in one search, we have ``num_simulations`` num of nodes at most.
+
                 latent_states = []
 
                 # prepare a result wrapper to transport results between python and c++ parts
                 results = tree_muzero.SearchResults(num=num)
 
-                # latent_state_index_in_search_path: the first index of leaf node states in latent_state_batch, i.e. the search depth.
-                # latent_state_index_in_batch: the second index of leaf node states in latent_state_batch, i.e. the batch root node index, maximum is ``env_num``.
-                # the latent state of the leaf node is latent_state_batch[x, y].
-                # the index of value prefix hidden state of the leaf node are in the same manner.
+                # latent_state_index_in_search_path: The first index of the latent state corresponding to the leaf node in latent_state_batch_in_search_path, that is, the search depth.
+                # latent_state_index_in_batch: The second index of the latent state corresponding to the leaf node in latent_state_batch_in_search_path, i.e. the index in the batch, whose maximum is ``batch_size``.
+                # e.g. the latent state of the leaf node in (x, y) is latent_state_batch_in_search_path[x, y], where x is current_latent_state_index, y is batch_index.
                 """
                 MCTS stage 1: Selection
                     Each simulation starts from the internal root state s0, and finishes when the simulation reaches a leaf node s_l.
@@ -139,10 +136,12 @@ class StochasticMuZeroMCTSPtree(object):
                 # only for discrete action
                 last_actions = torch.from_numpy(np.asarray(last_actions)).to(device).long()
                 """
-                MCTS stage 2: Expansion
-                    At the final time-step l of the simulation, the next_latent_state and reward/value_prefix are computed by the dynamics function.
-                    Then we calculate the policy_logits and value for the leaf node (next_latent_state) by the prediction function. (aka. evaluation)
-                """
+                   MCTS stage 2: Expansion
+                       At the final time-step l of the simulation, the next_latent_state and reward/value_prefix are computed by the dynamics function.
+                       Then we calculate the policy_logits and value for the leaf node (next_latent_state) by the prediction function. (aka. evaluation)
+                   MCTS stage 3: Backup
+                       At the end of the simulation, the statistics along the trajectory are updated.
+                   """
                 # network_output = model.recurrent_inference(latent_states, last_actions)
 
                 is_child_chance_batch = [None] * num
@@ -157,7 +156,7 @@ class StochasticMuZeroMCTSPtree(object):
                         # The last action or outcome is a chance outcome.
                         network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
                                                                    last_actions[i].unsqueeze(0),
-                                                                   latent_to_afterstate=True)
+                                                                   afterstate=False)
 
                         # child_state = network_output.dynamics(parent.state, history.last_action_or_outcome())
                         # network_output = network_output.predictions(child_state)
@@ -184,7 +183,7 @@ class StochasticMuZeroMCTSPtree(object):
 
                         network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
                                                                    last_actions[i].unsqueeze(0),
-                                                                   latent_to_afterstate=False)
+                                                                   afterstate=True)
 
                         # child_state = network_output.afterstate_dynamics(parent.state, history.last_action_or_outcome())
                         # network_output = network_output.afterstate_predictions(child_state)
@@ -218,15 +217,15 @@ class StochasticMuZeroMCTSPtree(object):
 
                 latent_state_batch_in_search_path.append(latent_state_batch)
                 # increase the index of leaf node
-                index_of_simulation += 1
+                current_latent_state_index += 1
 
-                """
-                MCTS stage 3: Backup
-                    At the end of the simulation, the statistics along the trajectory are updated.
-                """
+                # In ``batch_backpropagate()``, we first expand the leaf node using ``the policy_logits`` and
+                # ``reward`` predicted by the model, then perform backpropagation along the search path to update the
+                # statistics.
 
-                # backpropagation along the search path to update the attributes
+                # NOTE: simulation_index + 1 is very important, which is the depth of the current leaf node.
+                current_latent_state_index = simulation_index + 1
                 tree_muzero.batch_backpropagate(
-                    index_of_simulation, discount_factor, reward_batch, value_batch, policy_logits_batch,
+                    current_latent_state_index, discount_factor, reward_batch, value_batch, policy_logits_batch,
                     min_max_stats_lst, results, virtual_to_play, is_child_chance_batch
                 )
