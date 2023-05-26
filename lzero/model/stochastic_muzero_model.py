@@ -266,7 +266,7 @@ class StochasticMuZeroModel(nn.Module):
         # i just think it is the afterstate label,
         if not latent_to_afterstate:
             next_latent_state, reward = self._afterstate_dynamics(latent_state, action)
-            policy_logits, value = self._prediction(next_latent_state)   
+            policy_logits, value = self._afterstate_prediction(next_latent_state)   
             return MZNetworkOutput(value, reward, policy_logits, next_latent_state)         
         next_latent_state, reward = self._dynamics(latent_state, action)
         policy_logits, value = self._prediction(next_latent_state)
@@ -310,6 +310,23 @@ class StochasticMuZeroModel(nn.Module):
             - value (:obj:`torch.Tensor`): :math:`(B, value_support_size)`, where B is batch_size.
         """
         return self.prediction_network(latent_state)
+
+    def _afterstate_prediction(self, latent_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Overview:
+            Use the prediction network to predict ``policy_logits`` and ``value``.
+        Arguments:
+            - latent_state (:obj:`torch.Tensor`): The encoding latent state of input state.
+        Returns:
+            - policy_logits (:obj:`torch.Tensor`): The output logit to select discrete action.
+            - value (:obj:`torch.Tensor`): The output value of input state to help policy improvement and evaluation.
+        Shapes:
+            - latent_state (:obj:`torch.Tensor`): :math:`(B, H_, W_)`, where B is batch_size, H_ is the height of \
+                latent state, W_ is the width of latent state.
+            - policy_logits (:obj:`torch.Tensor`): :math:`(B, action_dim)`, where B is batch_size.
+            - value (:obj:`torch.Tensor`): :math:`(B, value_support_size)`, where B is batch_size.
+        """
+        return self.afterstate_prediction_network(latent_state)
 
     def _dynamics(self, latent_state: torch.Tensor, action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
