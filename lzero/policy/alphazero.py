@@ -5,7 +5,6 @@ import numpy as np
 import torch.distributions
 import torch.nn.functional as F
 import torch.optim as optim
-from ding.model import model_wrap
 from ding.policy.base_policy import Policy
 from ding.torch_utils import to_device
 from ding.utils import POLICY_REGISTRY
@@ -24,6 +23,10 @@ class AlphaZeroPolicy(Policy):
 
     # The default_config for AlphaZero policy.
     config = dict(
+        # (bool) Whether to use torch.compile method to speed up our model, which required torch>=2.0.
+        torch_compile=False,
+        # (bool) Whether to use TF32 for our model.
+        tensor_float_32=False,
         model=dict(
             # (tuple) The stacked obs shape.
             observation_shape=(3, 6, 6),
@@ -34,6 +37,15 @@ class AlphaZeroPolicy(Policy):
         ),
         # (bool) Whether to use cuda for network.
         cuda=False,
+        # (int) How many updates(iterations) to train after collector's one collection.
+        # Bigger "update_per_collect" means bigger off-policy.
+        # collect data -> update policy-> collect data -> ...
+        # For different env, we have different episode_length,
+        # we usually set update_per_collect = collector_env_num * episode_length / batch_size * reuse_factor.
+        # If we set update_per_collect=None, we will set update_per_collect = collected_transitions_num * cfg.policy.model_update_ratio automatically.
+        update_per_collect=None,
+        # (float) The ratio of the collected data used for training. Only effective when ``update_per_collect`` is not None.
+        model_update_ratio=0.1,
         # (int) Minibatch size for one gradient descent.
         batch_size=256,
         # (str) Optimizer for training policy network. ['SGD', 'Adam', 'AdamW']
@@ -127,8 +139,11 @@ class AlphaZeroPolicy(Policy):
         self._value_weight = self._cfg.value_weight
         self._entropy_weight = self._cfg.entropy_weight
         # Main and target models
-        self._learn_model = model_wrap(self._model, wrapper_name='base')
-        self._learn_model.reset()
+        self._learn_model = self._model
+
+        # TODO(pu): test the effect of torch 2.0
+        if self._cfg.torch_compile:
+            self._learn_model = torch.compile(self._learn_model)
 
     def _forward_learn(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, float]:
         inputs = default_collate(inputs)
@@ -192,8 +207,7 @@ class AlphaZeroPolicy(Policy):
             Collect mode init method. Called by ``self.__init__``. Initialize the collect model and MCTS utils.
         """
         self._collect_mcts = MCTS(self._cfg.mcts)
-        self._collect_model = model_wrap(self._model, wrapper_name='base')
-        self._collect_model.reset()
+        self._collect_model = self._model
         self.collect_mcts_temperature = 1
 
     @torch.no_grad()
@@ -241,8 +255,7 @@ class AlphaZeroPolicy(Policy):
             Evaluate mode init method. Called by ``self.__init__``. Initialize the eval model and MCTS utils.
         """
         self._eval_mcts = MCTS(self._cfg.mcts)
-        self._eval_model = model_wrap(self._model, wrapper_name='base')
-        self._eval_model.reset()
+        self._eval_model = self._model
 
     def _forward_eval(self, envs: Dict, obs: Dict) -> Dict[str, torch.Tensor]:
         """

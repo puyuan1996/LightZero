@@ -99,8 +99,11 @@ class SampledEfficientZeroPolicy(Policy):
         # Bigger "update_per_collect" means bigger off-policy.
         # collect data -> update policy-> collect data -> ...
         # For different env, we have different episode_length,
-        # we usually set update_per_collect = collector_env_num * episode_length / batch_size * reuse_factor
-        update_per_collect=100,
+        # we usually set update_per_collect = collector_env_num * episode_length / batch_size * reuse_factor.
+        # If we set update_per_collect=None, we will set update_per_collect = collected_transitions_num * cfg.policy.model_update_ratio automatically.
+        update_per_collect=None,
+        # (float) The ratio of the collected data used for training. Only effective when ``update_per_collect`` is not None.
+        model_update_ratio=0.1,
         # (int) Minibatch size for one gradient descent.
         batch_size=256,
         # (str) Optimizer for training policy network. ['SGD', 'Adam', 'AdamW']
@@ -613,13 +616,18 @@ class SampledEfficientZeroPolicy(Policy):
         # take the init hypothetical step k=unroll_step
         target_normalized_visit_count = target_policy[:, unroll_step]
 
-        # Note: The target_policy_entropy is just for debugging.
-        target_normalized_visit_count_masked = torch.index_select(
-            target_normalized_visit_count, 0,
-            torch.nonzero(mask_batch[:, unroll_step]).squeeze(-1)
-        )
-        target_dist = Categorical(target_normalized_visit_count_masked)
-        target_policy_entropy = target_dist.entropy().mean()
+        # ******* NOTE: target_policy_entropy is only for debug.  ******
+        non_masked_indices = torch.nonzero(mask_batch[:, unroll_step]).squeeze(-1)
+        # Check if there are any unmasked rows
+        if len(non_masked_indices) > 0:
+            target_normalized_visit_count_masked = torch.index_select(
+                target_normalized_visit_count, 0, non_masked_indices
+            )
+            target_dist = Categorical(target_normalized_visit_count_masked)
+            target_policy_entropy = target_dist.entropy().mean()
+        else:
+            # Set target_policy_entropy to 0 if all rows are masked
+            target_policy_entropy = 0
 
         # shape: (batch_size, num_unroll_steps, num_of_sampled_actions, action_dim, 1) -> (batch_size,
         # num_of_sampled_actions, action_dim) e.g. (4, 6, 20, 2, 1) ->  (4, 20, 2)

@@ -93,7 +93,10 @@ class EfficientZeroPolicy(Policy):
         # collect data -> update policy-> collect data -> ...
         # For different env, we have different episode_length,
         # we usually set update_per_collect = collector_env_num * episode_length / batch_size * reuse_factor
-        update_per_collect=100,
+        # if we set update_per_collect=None, we will set update_per_collect = collected_transitions_num * cfg.policy.model_update_ratio automatically.
+        update_per_collect=None,
+        # (float) The ratio of the collected data used for training. Only effective when ``update_per_collect`` is not None.
+        model_update_ratio=0.1,
         # (int) Minibatch size for one gradient descent.
         batch_size=256,
         # (str) Optimizer for training policy network. ['SGD', 'Adam', 'AdamW']
@@ -108,13 +111,13 @@ class EfficientZeroPolicy(Policy):
         momentum=0.9,
         # (float) The maximum constraint value of gradient norm clipping.
         grad_clip_value=10,
-        # (int) The number of episode in each collecting stage.
+        # (int) The number of episodes in each collecting stage.
         n_episode=8,
         # (float) the number of simulations in MCTS.
         num_simulations=50,
         # (float) Discount factor (gamma) for returns.
         discount_factor=0.997,
-        # (int) The number of step for calculating target q_value.
+        # (int) The number of steps for calculating target q_value.
         td_steps=5,
         # (int) The number of unroll steps in dynamics network.
         num_unroll_steps=5,
@@ -318,14 +321,20 @@ class EfficientZeroPolicy(Policy):
         # ==============================================================
         policy_loss = cross_entropy_loss(policy_logits, target_policy[:, 0])
 
-        # only for debug. take the init hypothetical step k=0.
+        # Here we take the init hypothetical step k=0.
         target_normalized_visit_count_init_step = target_policy[:, 0]
-        try:
-            # if there is zero in target_normalized_visit_count_init_step
-            target_dist = Categorical(target_normalized_visit_count_init_step)
+
+        # ******* NOTE: target_policy_entropy is only for debug.  ******
+        non_masked_indices = torch.nonzero(mask_batch[:, 0]).squeeze(-1)
+        # Check if there are any unmasked rows
+        if len(non_masked_indices) > 0:
+            target_normalized_visit_count_masked = torch.index_select(
+                target_normalized_visit_count_init_step, 0, non_masked_indices
+            )
+            target_dist = Categorical(target_normalized_visit_count_masked)
             target_policy_entropy = target_dist.entropy().mean()
-        except Exception as error:
-            print(error)
+        else:
+            # Set target_policy_entropy to 0 if all rows are masked
             target_policy_entropy = 0
 
         value_loss = cross_entropy_loss(value, target_value_categorical[:, 0])
@@ -383,16 +392,23 @@ class EfficientZeroPolicy(Policy):
             # ==============================================================
             policy_loss += cross_entropy_loss(policy_logits, target_policy[:, step_i + 1])
 
-            # only for debug. take th hypothetical step k = step_i + 1
+            # Here we take the hypothetical step k = step_i + 1
             prob = torch.softmax(policy_logits, dim=-1)
             dist = Categorical(prob)
             policy_entropy += dist.entropy().mean()
             target_normalized_visit_count = target_policy[:, step_i + 1]
-            try:
-                target_dist = Categorical(target_normalized_visit_count)
+
+            # ******* NOTE: target_policy_entropy is only for debug.  ******
+            non_masked_indices = torch.nonzero(mask_batch[:, step_i + 1]).squeeze(-1)
+            # Check if there are any unmasked rows
+            if len(non_masked_indices) > 0:
+                target_normalized_visit_count_masked = torch.index_select(
+                    target_normalized_visit_count, 0, non_masked_indices
+                )
+                target_dist = Categorical(target_normalized_visit_count_masked)
                 target_policy_entropy += target_dist.entropy().mean()
-            except Exception:
-                # if there is zero in target_normalized_visit_count
+            else:
+                # Set target_policy_entropy to 0 if all rows are masked
                 target_policy_entropy += 0
 
             value_loss += cross_entropy_loss(value, target_value_categorical[:, step_i + 1])
