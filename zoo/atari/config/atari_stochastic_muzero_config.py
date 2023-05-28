@@ -22,14 +22,14 @@ n_episode = 8
 evaluator_env_num = 3
 num_simulations = 50
 update_per_collect = 1000
-batch_size = 128
+batch_size = 256
 max_env_step = int(1e6)
 reanalyze_ratio = 0.
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
-atari_muzero_config = dict(
+atari_stochastic_muzero_config = dict(
     exp_name=
     f'data_mz_ctree/{env_name[:-14]}_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_seed0',
     env=dict(
@@ -71,10 +71,10 @@ atari_muzero_config = dict(
         evaluator_env_num=evaluator_env_num,
     ),
 )
-atari_muzero_config = EasyDict(atari_muzero_config)
-main_config = atari_muzero_config
+atari_stochastic_muzero_config = EasyDict(atari_stochastic_muzero_config)
+main_config = atari_stochastic_muzero_config
 
-atari_muzero_create_config = dict(
+atari_stochastic_muzero_create_config = dict(
     env=dict(
         type='atari_lightzero',
         import_names=['zoo.atari.envs.atari_lightzero_env'],
@@ -89,8 +89,8 @@ atari_muzero_create_config = dict(
         import_names=['lzero.worker.muzero_collector'],
     )
 )
-atari_muzero_create_config = EasyDict(atari_muzero_create_config)
-create_config = atari_muzero_create_config
+atari_stochastic_muzero_create_config = EasyDict(atari_stochastic_muzero_create_config)
+create_config = atari_stochastic_muzero_create_config
 
 if __name__ == "__main__":
     from lzero.entry import train_muzero

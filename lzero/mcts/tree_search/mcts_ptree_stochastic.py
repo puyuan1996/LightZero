@@ -144,28 +144,31 @@ class StochasticMuZeroMCTSPtree(object):
                    """
                 # network_output = model.recurrent_inference(latent_states, last_actions)
 
-                is_child_chance_batch = [None] * num
+
+                num = len(leaf_nodes)
+
                 latent_state_batch = [None] * num
                 value_batch = [None] * num
                 reward_batch = [None] * num
                 policy_logits_batch = [None] * num
-                for i in range(num):
-                    if leaf_nodes[i].is_chance:
-                        # If leaf node is chance, then parent is not chance node.
-                        # The parent is not a chance node, afterstate to latent state transition.
-                        # The last action or outcome is a chance outcome.
+                is_child_chance_batch = [None] * num
+
+                chance_nodes = []
+                decision_nodes = []
+
+                for i, node in enumerate(leaf_nodes):
+                    if node.is_chance:
+                        chance_nodes.append((i, node))
+                    else:
+                        decision_nodes.append((i, node))
+
+                def process_nodes(nodes, is_chance):
+                    for i, node in nodes:
                         network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
                                                                    last_actions[i].unsqueeze(0),
-                                                                   afterstate=False)
-
-                        # child_state = network_output.dynamics(parent.state, history.last_action_or_outcome())
-                        # network_output = network_output.predictions(child_state)
-
-                        # This child is a decision node.
-                        is_child_chance_batch[i] = True
+                                                                   afterstate=not is_chance)
 
                         if not model.training:
-                            # if not in training, obtain the scalars of the value/reward
                             network_output.value = self.inverse_scalar_transform_handle(
                                 network_output.value).detach().cpu().numpy()
                             network_output.reward = self.inverse_scalar_transform_handle(
@@ -177,45 +180,17 @@ class StochasticMuZeroMCTSPtree(object):
                         value_batch[i] = network_output.value.reshape(-1).tolist()
                         reward_batch[i] = network_output.reward.reshape(-1).tolist()
                         policy_logits_batch[i] = network_output.policy_logits.tolist()
-                    else:
-                        # The parent is a decision node, latent state to afterstate transition.
-                        # The last action or outcome is an action.
+                        is_child_chance_batch[i] = is_chance
 
-                        network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
-                                                                   last_actions[i].unsqueeze(0),
-                                                                   afterstate=True)
-
-                        # child_state = network_output.afterstate_dynamics(parent.state, history.last_action_or_outcome())
-                        # network_output = network_output.afterstate_predictions(child_state)
-
-                        # The child is a chance node.
-                        is_child_chance_batch[i] = False
-
-                        if not model.training:
-                            # if not in training, obtain the scalars of the value/reward
-                            network_output.value = self.inverse_scalar_transform_handle(network_output.value
-                                                                                        ).detach().cpu().numpy()
-                            network_output.reward = self.inverse_scalar_transform_handle(network_output.reward
-                                                                                         ).detach().cpu().numpy()
-                            network_output.latent_state = network_output.latent_state.detach().cpu().numpy()
-                            network_output.policy_logits = network_output.policy_logits.detach().cpu().numpy()
-
-                        latent_state_batch[i] = network_output.latent_state
-                        value_batch[i] = network_output.value.reshape(-1).tolist()
-                        reward_batch[i] = network_output.reward.reshape(-1).tolist()
-                        policy_logits_batch[i] = network_output.policy_logits.tolist()
-
-                # latent_state_batch = torch.cat(latent_state_batch, dim=0)
-                # value_batch = torch.cat(value_batch, dim=0)
-                # reward_batch = torch.cat(reward_batch, dim=0)
-                # policy_logits_batch = torch.cat(policy_logits_batch, dim=0)
+                process_nodes(chance_nodes, True)
+                process_nodes(decision_nodes, False)
 
                 latent_state_batch = np.concatenate(latent_state_batch, axis=0)
                 value_batch = np.concatenate(value_batch, axis=0)
                 reward_batch = np.concatenate(reward_batch, axis=0)
                 policy_logits_batch = np.concatenate(policy_logits_batch, axis=0)
-
                 latent_state_batch_in_search_path.append(latent_state_batch)
+
                 # increase the index of leaf node
                 current_latent_state_index += 1
 

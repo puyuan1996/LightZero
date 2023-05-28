@@ -15,8 +15,8 @@ reanalyze_ratio = 0
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
-cartpole_muzero_config = dict(
-    exp_name=f'data_mz_ctree/cartpole_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_seed0',
+cartpole_stochastic_muzero_config = dict(
+    exp_name=f'data_stochastic_mz_ctree/cartpole_stochastic_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_seed0',
     env=dict(
         env_name='CartPole-v0',
         continuous=False,
@@ -57,10 +57,10 @@ cartpole_muzero_config = dict(
     ),
 )
 
-cartpole_muzero_config = EasyDict(cartpole_muzero_config)
-main_config = cartpole_muzero_config
+cartpole_stochastic_muzero_config = EasyDict(cartpole_stochastic_muzero_config)
+main_config = cartpole_stochastic_muzero_config
 
-cartpole_muzero_create_config = dict(
+cartpole_stochastic_muzero_create_config = dict(
     env=dict(
         type='cartpole_lightzero',
         import_names=['zoo.classic_control.cartpole.envs.cartpole_lightzero_env'],
@@ -75,8 +75,8 @@ cartpole_muzero_create_config = dict(
         import_names=['lzero.worker.muzero_collector'],
     )
 )
-cartpole_muzero_create_config = EasyDict(cartpole_muzero_create_config)
-create_config = cartpole_muzero_create_config
+cartpole_stochastic_muzero_create_config = EasyDict(cartpole_stochastic_muzero_create_config)
+create_config = cartpole_stochastic_muzero_create_config
 
 if __name__ == "__main__":
     # Users can use different train entry by specifying the entry_type.
