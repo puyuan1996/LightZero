@@ -5,12 +5,12 @@
     "distutils": {
         "depends": [],
         "include_dirs": [
-            "/private/var/folders/r5/znmp_3cn0_b41yvr2tvld9ys0qypks/T/pip-build-env-ahmhjp56/overlay/lib/python3.8/site-packages/numpy/core/include"
+            "/tmp/pip-build-env-ncvj_mwo/overlay/lib/python3.8/site-packages/numpy/core/include"
         ],
         "language": "c++",
         "name": "zoo.board_games.tictactoe.envs.get_done_winner_cython",
         "sources": [
-            "/Users/puyuan/code/LightZero/zoo/board_games/tictactoe/envs/get_done_winner_cython.pyx"
+            "/home/SENSETIME/zhoutong/osiris/lab_light_zero/zoo/board_games/tictactoe/envs/get_done_winner_cython.pyx"
         ]
     },
     "module_name": "zoo.board_games.tictactoe.envs.get_done_winner_cython"
