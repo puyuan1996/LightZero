@@ -83,7 +83,7 @@ namespace tree
 
     CNode::~CNode() {}
 
-    void CNode::expand(int to_play, int current_latent_state_index, int batch_index, float reward, const std::vector<float> &policy_logits)
+    void CNode::expand(int to_play, int current_latent_state_index, int batch_index, float reward, const std::vector<float> &policy_logits, bool is_chance)
     {
         /*
         Overview:
@@ -99,11 +99,13 @@ namespace tree
         this->current_latent_state_index = current_latent_state_index;
         this->batch_index = batch_index;
         this->reward = reward;
-        bool is_child_chance = true;
+
+        bool child_is_chance = true;
         if(this->is_chance == true){
-            is_child_chance = false;
+            child_is_chance = false;
             this->reward = 0.0;
         }
+
         int action_num = policy_logits.size();
         if (this->legal_actions.size() == 0)
         {
@@ -143,7 +145,7 @@ namespace tree
         {
             prior = policy[a] / policy_sum;
             std::vector<int> tmp_empty;
-            this->children[a] = CNode(prior, tmp_empty, is_chance = is_child_chance); // only for muzero/efficient zero, not support alphazero
+            this->children[a] = CNode(prior, tmp_empty, is_chance = child_is_chance); // only for muzero/efficient zero, not support alphazero
         }
         
         #ifdef _WIN32
@@ -339,7 +341,7 @@ namespace tree
         */
         for (int i = 0; i < this->root_num; ++i)
         {
-            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i]);
+            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i], false);
             this->roots[i].add_exploration_noise(root_noise_weight, noises[i]);
 
             this->roots[i].visit_count += 1;
@@ -358,7 +360,7 @@ namespace tree
         */
         for (int i = 0; i < this->root_num; ++i)
         {
-            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i]);
+            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i], false);
 
             this->roots[i].visit_count += 1;
         }
@@ -533,7 +535,7 @@ namespace tree
         }
     }
 
-    void cbatch_backpropagate(int current_latent_state_index, float discount_factor, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float> > &policies, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, std::vector<int> &to_play_batch)
+    void cbatch_backpropagate(int current_latent_state_index, float discount_factor, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float> > &policies, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, std::vector<int> &to_play_batch, std::vector<bool> &is_chance_list)
     {
         /*
         Overview:
@@ -550,7 +552,7 @@ namespace tree
         */
         for (int i = 0; i < results.num; ++i)
         {
-            results.nodes[i]->expand(to_play_batch[i], current_latent_state_index, i, value_prefixs[i], policies[i]);
+            results.nodes[i]->expand(to_play_batch[i], current_latent_state_index, i, value_prefixs[i], policies[i], is_chance_list[i]);
             cbackpropagate(results.search_paths[i], min_max_stats_lst->stats_lst[i], to_play_batch[i], values[i], discount_factor);
         }
     }
@@ -749,7 +751,9 @@ namespace tree
             results.last_actions.push_back(last_action);
             results.search_lens.push_back(search_len);
             results.nodes.push_back(node);
+            results.leaf_node_is_chance.push_back(node->is_chance);
             results.virtual_to_play_batchs.push_back(virtual_to_play_batch[i]);
+
         }
     }
 

@@ -110,7 +110,7 @@ class StochasticMuZeroMCTSCtree(object):
                 MCTS stage 1: Selection
                     Each simulation starts from the internal root state s0, and finishes when the simulation reaches a leaf node s_l.
                 """
-                leaf_node_is_chance, latent_state_index_in_search_path, latent_state_index_in_batch, last_actions, virtual_to_play_batch = stochastic_mz_tree.batch_traverse(
+                leaf_nodes, latent_state_index_in_search_path, latent_state_index_in_batch, last_actions, virtual_to_play_batch = stochastic_mz_tree.batch_traverse(
                     roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst, results,
                     copy.deepcopy(to_play_batch)
                 )
@@ -131,23 +131,23 @@ class StochasticMuZeroMCTSCtree(object):
                 """
                 # network_output = model.recurrent_inference(latent_states, last_actions)
 
-                num = len(leaf_node_is_chance)
+                num = len(leaf_nodes)
                 latent_state_batch = [None] * num
                 value_batch = [None] * num
                 reward_batch = [None] * num
                 policy_logits_batch = [None] * num
                 child_is_chance_batch = [None] * num
-                chance_nodes_index = []
-                decision_nodes_index = []
+                chance_nodes = []
+                decision_nodes = []
 
-                for i, leaf_node_is_chance_ in enumerate(leaf_node_is_chance):
-                    if leaf_node_is_chance_:
-                        chance_nodes_index.append((i))
+                for i, node in enumerate(leaf_nodes):
+                    if node.is_chance:
+                        chance_nodes.append((i, node))
                     else:
-                        decision_nodes_index.append((i))
+                        decision_nodes.append((i, node))
 
-                def process_nodes(nodes_index, is_chance):
-                    for i in nodes_index:
+                def process_nodes(nodes, is_chance):
+                    for i, node in nodes:
                         network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
                                                                    last_actions[i].unsqueeze(0),
                                                                    afterstate=not is_chance)
@@ -166,8 +166,8 @@ class StochasticMuZeroMCTSCtree(object):
                         policy_logits_batch[i] = network_output.policy_logits.tolist()
                         child_is_chance_batch[i] = is_chance
 
-                process_nodes(chance_nodes_index, True)
-                process_nodes(decision_nodes_index, False)
+                process_nodes(chance_nodes, True)
+                process_nodes(decision_nodes, False)
 
                 latent_state_batch = np.concatenate(latent_state_batch, axis=0)
                 # tolist() is to be compatible with cpp datatype.

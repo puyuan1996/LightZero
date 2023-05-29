@@ -37,7 +37,7 @@ cartpole_stochastic_muzero_config = dict(
             discrete_action_encoding_type='one_hot',
             norm_type='BN', 
         ),
-        mcts_ctree=False,
+        mcts_ctree=True,
         cuda=True,
         env_type='not_board_games',
         game_segment_length=50,

@@ -68,23 +68,32 @@ cdef class Node:
         pass
 
     def expand(self, int to_play, int current_latent_state_index, int batch_index, float value_prefix,
-               list policy_logits):
+               list policy_logits, bool is_chance):
         cdef vector[float] cpolicy = policy_logits
-        self.cnode.expand(to_play, current_latent_state_index, batch_index, value_prefix, cpolicy)
+        self.cnode.expand(to_play, current_latent_state_index, batch_index, value_prefix, cpolicy, is_chance)
 
 def batch_backpropagate(int current_latent_state_index, float discount_factor, list value_prefixs, list values, list policies,
-                         MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_play_batch):
+                         MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_play_batch, list is_chance_list):
     cdef int i
     cdef vector[float] cvalue_prefixs = value_prefixs
     cdef vector[float] cvalues = values
     cdef vector[vector[float]] cpolicies = policies
 
     cbatch_backpropagate(current_latent_state_index, discount_factor, cvalue_prefixs, cvalues, cpolicies,
-                          min_max_stats_lst.cmin_max_stats_lst, results.cresults, to_play_batch)
+                          min_max_stats_lst.cmin_max_stats_lst, results.cresults, to_play_batch, is_chance_list)
 
 def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_factor, MinMaxStatsList min_max_stats_lst,
                    ResultsWrapper results, list virtual_to_play_batch):
     cbatch_traverse(roots.roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst.cmin_max_stats_lst, results.cresults,
                     virtual_to_play_batch)
 
-    return results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+    # return  results.cresults.nodes, results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+    # return vector_to_list(results.cresults.nodes), results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+    # return  results.nodes, results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+    
+    # return vector_bool_to_list(results.cresults.leaf_node_is_chance), results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+
+    return results.cresults.leaf_node_is_chance, results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
+
+cdef list vector_bool_to_list(const vector[bool]& vec):
+    return [vec[i] for i in range(vec.size())]

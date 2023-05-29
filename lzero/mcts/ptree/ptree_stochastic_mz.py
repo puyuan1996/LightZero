@@ -56,10 +56,11 @@ class Node:
         # self.is_chance = is_chance
         # Here we reserve the is_chance as input but not use it
         if self.is_chance is True:
-            is_child_chance = False 
+            child_is_chance = False
+            # TODO
             self.reward = 0.0                        
         else:
-            is_child_chance = True
+            child_is_chance = True
         if self.legal_actions is None:
             self.legal_actions = np.arange(len(policy_logits))
         self.latent_state_index_in_search_path = latent_state_index_in_search_path
@@ -67,7 +68,7 @@ class Node:
         policy_values = torch.softmax(torch.tensor([policy_logits[a] for a in self.legal_actions]), dim=0).tolist()
         policy = {legal_action: policy_values[index] for index, legal_action in enumerate(self.legal_actions)}
         for action, prior in policy.items():
-            self.children[action] = Node(prior, is_chance=is_child_chance)
+            self.children[action] = Node(prior, is_chance=child_is_chance)
             
 
     def add_exploration_noise(self, exploration_fraction: float, noises: List[float]) -> None:
@@ -208,9 +209,9 @@ class Roots:
             #  to_play: int, latent_state_index_in_search_path: int, latent_state_index_in_batch: int,
             # TODO(pu): why latent_state_index_in_search_path=0, latent_state_index_in_batch=i?
             if to_play is None:
-                self.roots[i].expand(-1, 0, i, rewards[i], policies[i])
+                self.roots[i].expand(-1, 0, i, rewards[i], policies[i], is_chance=False)
             else:
-                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i])
+                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i], is_chance=False)
 
             self.roots[i].add_exploration_noise(root_noise_weight, noises[i])
             self.roots[i].visit_count += 1
@@ -226,9 +227,9 @@ class Roots:
         """
         for i in range(self.root_num):
             if to_play is None:
-                self.roots[i].expand(-1, 0, i, rewards[i], policies[i])
+                self.roots[i].expand(-1, 0, i, rewards[i], policies[i], is_chance=False)
             else:
-                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i])
+                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i], is_chance=False)
 
             self.roots[i].visit_count += 1
 
