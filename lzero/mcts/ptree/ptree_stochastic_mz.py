@@ -18,7 +18,7 @@ class Node:
      Arguments:
      """
 
-    def __init__(self, prior: float, legal_actions: List = None, action_space_size: int = 9, is_chance: bool = False) -> None:
+    def __init__(self, prior: float, legal_actions: List = None, action_space_size: int = 9, is_chance: bool = False, chance_space_size: int = 2) -> None:
         self.prior = prior
         self.legal_actions = legal_actions
         self.action_space_size = action_space_size
@@ -36,40 +36,49 @@ class Node:
         self.parent_value_prefix = 0  # only used in update_tree_q method
 
         self.is_chance = is_chance
+        self.chance_space_size = chance_space_size
 
     def expand(
             self, to_play: int, latent_state_index_in_search_path: int, latent_state_index_in_batch: int, reward: float,
-            policy_logits: List[float], is_chance: bool = False
+            policy_logits: List[float], child_is_chance: bool = False
     ) -> None:
         """
         Overview:
             Expand the child nodes of the current node.
         Arguments:
             - to_play (:obj:`Class int`): which player to play the game in the current node.
-            - latent_state_index_in_search_path (:obj:`Class int`): the x/first index of hidden state vector of the current node, i.e. the search depth.
-            - latent_state_index_in_batch (:obj:`Class int`): the y/second index of hidden state vector of the current node, i.e. the index of batch root node, its maximum is ``batch_size``/``env_num``.
+            - latent_state_index_in_search_path (:obj:`Class int`): the x/first index of latent state vector of the current node, i.e. the search depth.
+            - latent_state_index_in_batch (:obj:`Class int`): the y/second index of latent state vector of the current node, i.e. the index of batch root node, its maximum is ``batch_size``/``env_num``.
             - value_prefix: (:obj:`Class float`): the value prefix of the current node.
             - policy_logits: (:obj:`Class List`): the policy logit of the child nodes.
         """
         self.to_play = to_play
         self.reward = reward
-        # self.is_chance = is_chance
-        # Here we reserve the is_chance as input but not use it
+
+        # assert (self.is_chance != child_is_chance), f"is_chance and child_is_chance should be different, current is {self.is_chance}-{child_is_chance}, "
+
         if self.is_chance is True:
             child_is_chance = False
-            # TODO
-            self.reward = 0.0                        
+            self.reward = 0.0
+
+            if self.legal_actions is None:
+                self.legal_actions = np.arange(len(policy_logits))
+            self.latent_state_index_in_search_path = latent_state_index_in_search_path
+            self.latent_state_index_in_batch = latent_state_index_in_batch
+            policy_values = torch.softmax(torch.tensor([policy_logits[a] for a in self.legal_actions]), dim=0).tolist()
+            policy = {legal_action: policy_values[index] for index, legal_action in enumerate(self.legal_actions)}
+            for action, prior in policy.items():
+                self.children[action] = Node(prior, is_chance=child_is_chance)
         else:
             child_is_chance = True
-        if self.legal_actions is None:
-            self.legal_actions = np.arange(len(policy_logits))
-        self.latent_state_index_in_search_path = latent_state_index_in_search_path
-        self.latent_state_index_in_batch = latent_state_index_in_batch
-        policy_values = torch.softmax(torch.tensor([policy_logits[a] for a in self.legal_actions]), dim=0).tolist()
-        policy = {legal_action: policy_values[index] for index, legal_action in enumerate(self.legal_actions)}
-        for action, prior in policy.items():
-            self.children[action] = Node(prior, is_chance=child_is_chance)
-            
+
+            self.legal_actions = np.arange(self.chance_space_size)
+            self.latent_state_index_in_search_path = latent_state_index_in_search_path
+            self.latent_state_index_in_batch = latent_state_index_in_batch
+            policy_values = torch.softmax(torch.tensor([policy_logits[a] for a in self.legal_actions]), dim=0).tolist()
+            policy = {legal_chance_action: policy_values[index] for index, legal_chance_action in enumerate(self.legal_actions)}
+            for action, prior in policy.items():
+                self.children[action] = Node(prior, is_chance=child_is_chance)
 
     def add_exploration_noise(self, exploration_fraction: float, noises: List[float]) -> None:
         """
@@ -209,9 +218,9 @@ class Roots:
             #  to_play: int, latent_state_index_in_search_path: int, latent_state_index_in_batch: int,
             # TODO(pu): why latent_state_index_in_search_path=0, latent_state_index_in_batch=i?
             if to_play is None:
-                self.roots[i].expand(-1, 0, i, rewards[i], policies[i], is_chance=False)
+                self.roots[i].expand(-1, 0, i, rewards[i], policies[i], child_is_chance=True)
             else:
-                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i], is_chance=False)
+                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i], child_is_chance=True)
 
             self.roots[i].add_exploration_noise(root_noise_weight, noises[i])
             self.roots[i].visit_count += 1
@@ -227,9 +236,9 @@ class Roots:
         """
         for i in range(self.root_num):
             if to_play is None:
-                self.roots[i].expand(-1, 0, i, rewards[i], policies[i], is_chance=False)
+                self.roots[i].expand(-1, 0, i, rewards[i], policies[i], child_is_chance=True)
             else:
-                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i], is_chance=False)
+                self.roots[i].expand(to_play[i], 0, i, rewards[i], policies[i], child_is_chance=True)
 
             self.roots[i].visit_count += 1
 
@@ -336,19 +345,11 @@ def select_child(
     """
 
     if node.is_chance:
-        # If the node is chance we sample from the prior.
+        # If the node is chance node, we sample from the prior outcome distribution.
         outcomes, probs = zip(*[(o, n.prior) for o, n in node.children.items()])
-
-        outcomes, probs = list(outcomes), np.array(list(probs))
-        remainder = np.abs((1 - probs + 1e-12).mean())
-        probs = (probs + remainder) / (probs + remainder).sum()
         outcome = np.random.choice(outcomes, p=probs)
-        # return outcome, node.children[outcome]
         return outcome
-
-    # _, action, child = max((self.ucb_score(self.node, child), action, child)
-    #                        for action, child in self.node.children.items())
-    # return action, child
+        # print(outcome, node.children[outcome])
 
     # If the node is decision node, we select the action with the highest ucb score.
     max_score = -np.inf
@@ -432,7 +433,6 @@ def batch_traverse(
         min_max_stats_lst: List[MinMaxStats],
         results: SearchResults,
         virtual_to_play: List,
-# ) -> Tuple[List[int], List[int], List[Union[int, float]], List]:
 ) -> Tuple[Any, Any]:
 
     """
@@ -447,8 +447,8 @@ def batch_traverse(
             `virtual` is to emphasize that actions are performed on an imaginary hidden state.
         - continuous_action_space: whether the action space is continous in current env.
     Returns:
-        - latent_state_index_in_search_path (:obj:`list`): the list of x/first index of hidden state vector of the searched node, i.e. the search depth.
-        - latent_state_index_in_batch (:obj:`list`): the list of y/second index of hidden state vector of the searched node, i.e. the index of batch root node, its maximum is ``batch_size``/``env_num``.
+        - latent_state_index_in_search_path (:obj:`list`): the list of x/first index of latent state vector of the searched node, i.e. the search depth.
+        - latent_state_index_in_batch (:obj:`list`): the list of y/second index of latent state vector of the searched node, i.e. the index of batch root node, its maximum is ``batch_size``/``env_num``.
         - last_actions (:obj:`list`): the action performed by the previous node.
         - virtual_to_play (:obj:`list`): the to_play list used in self_play collecting and trainin gin board games,
             `virtual` is to emphasize that actions are performed on an imaginary hidden state.
@@ -501,6 +501,7 @@ def batch_traverse(
 
             results.search_paths[i].append(node)
             search_len += 1
+
             # note this return the parent node of the current searched node
             parent = results.search_paths[i][len(results.search_paths[i]) - 1 - 1]
             results.latent_state_index_in_search_path[i] = parent.latent_state_index_in_search_path
@@ -582,7 +583,7 @@ def batch_backpropagate(
     Overview:
         Backpropagation along the search path to update the attributes.
     Arguments:
-        - latent_state_index_in_search_path (:obj:`Class Int`): the index of hidden state vector.
+        - latent_state_index_in_search_path (:obj:`Class Int`): the index of latent state vector.
         - discount_factor (:obj:`Class Float`): discount_factor factor used i calculating bootstrapped value, if env is board_games, we set discount_factor=1.
         - value_prefixs (:obj:`Class List`): the value prefixs of nodes along the search path.
         - values (:obj:`Class List`):  the values to propagate along the search path.
@@ -595,7 +596,7 @@ def batch_backpropagate(
         # ****** expand the leaf node ******
         if to_play is None:
             # set to_play=-1, because two_player mode to_play = {1,2}
-            results.nodes[i].expand(-1, latent_state_index_in_search_path, i, value_prefixs[i], policies[i],  is_chance_list[i])
+            results.nodes[i].expand(-1, latent_state_index_in_search_path, i, value_prefixs[i], policies[i], is_chance_list[i])
         else:
             results.nodes[i].expand(to_play[i], latent_state_index_in_search_path, i, value_prefixs[i], policies[i], is_chance_list[i])
 

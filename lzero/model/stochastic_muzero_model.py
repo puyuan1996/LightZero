@@ -22,6 +22,7 @@ class StochasticMuZeroModel(nn.Module):
         self,
         observation_shape: SequenceType = (12, 96, 96),
         action_space_size: int = 6,
+        chance_space_size: int = 2,
         num_res_blocks: int = 1,
         num_channels: int = 64,
         reward_head_channels: int = 16,
@@ -95,6 +96,8 @@ class StochasticMuZeroModel(nn.Module):
             self.value_support_size = 1
             
         self.action_space_size = action_space_size
+        self.chance_space_size = chance_space_size
+
         self.proj_hid = proj_hid
         self.proj_out = proj_out
         self.pred_hid = pred_hid
@@ -164,7 +167,7 @@ class StochasticMuZeroModel(nn.Module):
             last_linear_layer_init_zero=self.last_linear_layer_init_zero,
         )
         self.afterstate_prediction_network = AfterstatePredictionNetwork(
-            action_space_size,
+            chance_space_size,
             num_res_blocks,
             num_channels,
             value_head_channels,
@@ -373,7 +376,7 @@ class StochasticMuZeroModel(nn.Module):
         # action[:, 0, None, None] shape:  (batch_size, action_dim, 1, 1) e.g. (8, 1, 1, 1)
         # the final action_encoding shape: (batch_size, 1, latent_state[2], latent_state[3]) e.g. (8, 1, 4, 1),
         # where each element is normalized as action[i]/action_space_size
-        action_encoding = (action[:, 0, None, None] * action_encoding / self.action_space_size)
+        action_encoding = (action[:, 0, None, None] * action_encoding / self.chance_space_size)
 
         # state_action_encoding shape: (batch_size, latent_state[1] + 1, latent_state[2], latent_state[3])
         state_action_encoding = torch.cat((latent_state, action_encoding), dim=1)

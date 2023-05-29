@@ -6,6 +6,12 @@
 #include <map>
 #include <cassert>
 #include <numeric>
+#include <iostream>
+#include <vector>
+#include <map>
+#include <random>
+#include <algorithm>
+#include <iterator>
 
 #ifdef _WIN32
 #include "..\..\common_lib\utils.cpp"
@@ -58,9 +64,11 @@ namespace tree
         this->to_play = 0;
         this->reward = 0.0;
         this->is_chance = false;
+        this->chance_space_size= 2;
+
     }
 
-    CNode::CNode(float prior, std::vector<int> &legal_actions, bool is_chance)
+    CNode::CNode(float prior, std::vector<int> &legal_actions, bool is_chance, int chance_space_size)
     {
         /*
         Overview:
@@ -79,11 +87,12 @@ namespace tree
         this->current_latent_state_index = -1;
         this->batch_index = -1;
         this->is_chance = is_chance;
+        this->chance_space_size = chance_space_size;
     }
 
     CNode::~CNode() {}
 
-    void CNode::expand(int to_play, int current_latent_state_index, int batch_index, float reward, const std::vector<float> &policy_logits, bool is_chance)
+    void CNode::expand(int to_play, int current_latent_state_index, int batch_index, float reward, const std::vector<float> &policy_logits, bool child_is_chance)
     {
         /*
         Overview:
@@ -100,10 +109,15 @@ namespace tree
         this->batch_index = batch_index;
         this->reward = reward;
 
-        bool child_is_chance = true;
+
+        // assert((this->is_chance != child_is_chance) && "is_chance and child_is_chance should be different");
+        
         if(this->is_chance == true){
             child_is_chance = false;
             this->reward = 0.0;
+        }
+        else{
+            child_is_chance = true;
         }
 
         int action_num = policy_logits.size();
@@ -114,6 +128,7 @@ namespace tree
                 this->legal_actions.push_back(i);
             }
         }
+
         float temp_policy;
         float policy_sum = 0.0;
 
@@ -574,39 +589,25 @@ namespace tree
             - action: the action to select.
         */
         if (root->is_chance) {
+                // If the node is a chance node, we sample from the prior outcome distribution.
                 std::vector<int> outcomes;
-                std::vector<float> probs;
+                std::vector<double> probs;
 
-                // Collect outcomes and probabilities from children
-                for (const auto& child : root->children) {
-                    outcomes.push_back(child.first);
-                    probs.push_back(child.second.prior);
+                for (const auto& kv : root->children) {
+                    outcomes.push_back(kv.first);
+                    probs.push_back(kv.second.prior); // Assuming 'prior' is a member variable of Node
                 }
 
-                // Calculate remainder and adjust probabilities
-                float remainder = 1.0f - std::accumulate(probs.begin(), probs.end(), 0.0f);
-                remainder /= static_cast<float>(probs.size());
-                for (auto& prob : probs) {
-                    prob += remainder;
-                }
-                float sumProbs = std::accumulate(probs.begin(), probs.end(), 0.0f);
-                        for (auto& prob : probs) {
-                            prob /= sumProbs;
-                        }
+                std::random_device rd;
+                std::mt19937 gen(rd());
+                std::discrete_distribution<> dist(probs.begin(), probs.end());
 
-                float randValue = static_cast<float>(std::rand()) / RAND_MAX;  // Generate a random value between 0 and 1
-                float cumulativeProb = 0.0f;
-                int index = 0;
-                for (; index < probs.size() - 1; ++index) {
-                    cumulativeProb += probs[index];
-                    if (randValue < cumulativeProb) {
-                        break;
-                    }
-                }
-            int outcome = outcomes[index];
+                int outcome = outcomes[dist(gen)];
+                // std::cout << "Outcome: " << outcome << std::endl;
 
             return outcome;
-            }
+        }
+
         float max_score = FLOAT_MIN;
         const float epsilon = 0.000001;
         std::vector<int> max_index_lst;

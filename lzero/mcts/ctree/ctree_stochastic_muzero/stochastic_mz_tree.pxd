@@ -32,7 +32,7 @@ cdef extern from "lib/cnode.cpp":
 cdef extern from "lib/cnode.h" namespace "tree":
     cdef cppclass CNode:
         CNode() except +
-        CNode(float prior, vector[int] &legal_actions, bool is_chance) except +
+        CNode(float prior, vector[int] &legal_actions, bool is_chance, int chance_space_size) except +
         int visit_count, to_play, current_latent_state_index, batch_index, best_action
         float value_prefixs, prior, value_sum, parent_value_prefix
 

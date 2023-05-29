@@ -23,13 +23,14 @@ namespace tree {
             int visit_count, to_play, current_latent_state_index, batch_index, best_action;
             float reward, prior, value_sum;
             bool is_chance;
+            int chance_space_size;
             std::vector<int> children_index;
             std::map<int, CNode> children;
 
             std::vector<int> legal_actions;
 
             CNode();
-            CNode(float prior, std::vector<int> &legal_actions, bool is_chance = false);
+            CNode(float prior, std::vector<int> &legal_actions, bool is_chance = false, int chance_space_size = 2);
             ~CNode();
 
             void expand(int to_play, int current_latent_state_index, int batch_index, float reward, const std::vector<float> &policy_logits, bool is_chance);

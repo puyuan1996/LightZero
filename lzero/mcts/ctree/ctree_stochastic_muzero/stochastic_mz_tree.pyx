@@ -64,7 +64,7 @@ cdef class Node:
     def __cinit__(self):
         pass
 
-    def __cinit__(self, float prior, vector[int] & legal_actions, bool is_chance):
+    def __cinit__(self, float prior, vector[int] & legal_actions, bool is_chance, int chance_space_size):
         pass
 
     def expand(self, int to_play, int current_latent_state_index, int batch_index, float value_prefix,
@@ -87,13 +87,5 @@ def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_f
     cbatch_traverse(roots.roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst.cmin_max_stats_lst, results.cresults,
                     virtual_to_play_batch)
 
-    # return  results.cresults.nodes, results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
-    # return vector_to_list(results.cresults.nodes), results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
-    # return  results.nodes, results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
-    
-    # return vector_bool_to_list(results.cresults.leaf_node_is_chance), results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
-
     return results.cresults.leaf_node_is_chance, results.cresults.latent_state_index_in_search_path, results.cresults.latent_state_index_in_batch, results.cresults.last_actions, results.cresults.virtual_to_play_batchs
 
-cdef list vector_bool_to_list(const vector[bool]& vec):
-    return [vec[i] for i in range(vec.size())]

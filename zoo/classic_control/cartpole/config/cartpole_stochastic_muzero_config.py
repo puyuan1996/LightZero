@@ -3,12 +3,20 @@ from easydict import EasyDict
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-collector_env_num = 8
-n_episode = 8
-evaluator_env_num = 3
-num_simulations = 25
-update_per_collect = 100
-batch_size = 256
+# collector_env_num = 8
+# n_episode = 8
+# evaluator_env_num = 3
+# num_simulations = 25
+# update_per_collect = 100
+# batch_size = 256
+# max_env_step = int(1e5)
+# reanalyze_ratio = 0
+collector_env_num = 2
+n_episode = 2
+evaluator_env_num = 2
+num_simulations = 5
+update_per_collect = 4
+batch_size = 4
 max_env_step = int(1e5)
 reanalyze_ratio = 0
 # ==============================================================
@@ -30,7 +38,8 @@ cartpole_stochastic_muzero_config = dict(
         model=dict(
             observation_shape=4,
             action_space_size=2,
-            model_type='conv', 
+            chance_space_size=2,
+            model_type='conv',
             lstm_hidden_size=128,
             latent_state_dim=128,
             self_supervised_learning_loss=True,  # NOTE: default is False.
@@ -38,6 +47,7 @@ cartpole_stochastic_muzero_config = dict(
             norm_type='BN', 
         ),
         mcts_ctree=True,
+        # mcts_ctree=False,
         cuda=True,
         env_type='not_board_games',
         game_segment_length=50,

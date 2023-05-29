@@ -35,6 +35,8 @@ class StochasticMuZeroPolicy(Policy):
             # (tuple) The stacked obs shape.
             # observation_shape=(1, 96, 96),  # if frame_stack_num=1
             observation_shape=(4, 96, 96),  # if frame_stack_num=4
+            # (int) The chance space size.
+            chance_space_size=2,
             # (bool) Whether to use the self-supervised learning loss.
             self_supervised_learning_loss=False,
             # (bool) Whether to use discrete support to represent categorical distribution for value/reward/value_prefix.
