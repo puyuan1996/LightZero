@@ -154,28 +154,43 @@ class StochasticMuZeroMCTSPtree(object):
                 decision_nodes = []
                 for i, node in enumerate(leaf_nodes):
                     if node.is_chance:
-                        chance_nodes.append((i, node))
+                        chance_nodes.append(i)
                     else:
-                        decision_nodes.append((i, node))
+                        decision_nodes.append(i)
 
-                def process_nodes(nodes, is_chance):
-                    for i, node in nodes:
-                        network_output = model.recurrent_inference(latent_states[i].unsqueeze(0),
-                                                                   last_actions[i].unsqueeze(0),
-                                                                   afterstate=not is_chance)
+                def process_nodes(node_indices, is_chance):
+                    # Return early if node_indices is empty
+                    if not node_indices:
+                        return
+                    # Slice and stack latent_states and last_actions based on node_indices
+                    latent_states_stack = torch.stack([latent_states[i] for i in node_indices], dim=0)
+                    last_actions_stack = torch.stack([last_actions[i] for i in node_indices], dim=0)
 
+                    # Pass the stacked batch through the recurrent_inference function
+                    network_output_batch = model.recurrent_inference(latent_states_stack,
+                                                                     last_actions_stack,
+                                                                     afterstate=not is_chance)
+
+                    # Split the batch output into separate nodes
+                    latent_state_splits = torch.split(network_output_batch.latent_state, 1, dim=0)
+                    value_splits = torch.split(network_output_batch.value, 1, dim=0)
+                    reward_splits = torch.split(network_output_batch.reward, 1, dim=0)
+                    policy_logits_splits = torch.split(network_output_batch.policy_logits, 1, dim=0)
+
+                    for i, (latent_state, value, reward, policy_logits) in zip(node_indices,
+                                                                               zip(latent_state_splits, value_splits,
+                                                                                   reward_splits,
+                                                                                   policy_logits_splits)):
                         if not model.training:
-                            network_output.value = self.inverse_scalar_transform_handle(
-                                network_output.value).detach().cpu().numpy()
-                            network_output.reward = self.inverse_scalar_transform_handle(
-                                network_output.reward).detach().cpu().numpy()
-                            network_output.latent_state = network_output.latent_state.detach().cpu().numpy()
-                            network_output.policy_logits = network_output.policy_logits.detach().cpu().numpy()
+                            value = self.inverse_scalar_transform_handle(value).detach().cpu().numpy()
+                            reward = self.inverse_scalar_transform_handle(reward).detach().cpu().numpy()
+                            latent_state = latent_state.detach().cpu().numpy()
+                            policy_logits = policy_logits.detach().cpu().numpy()
 
-                        latent_state_batch[i] = network_output.latent_state
-                        value_batch[i] = network_output.value.reshape(-1).tolist()
-                        reward_batch[i] = network_output.reward.reshape(-1).tolist()
-                        policy_logits_batch[i] = network_output.policy_logits.tolist()
+                        latent_state_batch[i] = latent_state
+                        value_batch[i] = value.reshape(-1).tolist()
+                        reward_batch[i] = reward.reshape(-1).tolist()
+                        policy_logits_batch[i] = policy_logits.tolist()
                         child_is_chance_batch[i] = is_chance
 
                 process_nodes(chance_nodes, True)
@@ -186,6 +201,7 @@ class StochasticMuZeroMCTSPtree(object):
                 reward_batch = np.concatenate(reward_batch, axis=0)
                 policy_logits_batch = np.concatenate(policy_logits_batch, axis=0)
                 latent_state_batch_in_search_path.append(latent_state_batch)
+
 
                 # In ``batch_backpropagate()``, we first expand the leaf node using ``the policy_logits`` and
                 # ``reward`` predicted by the model, then perform backpropagation along the search path to update the
