@@ -49,7 +49,7 @@ game_2048_stochastic_muzero_config = dict(
             # NOTE: whether to use the self_supervised_learning_loss. default is False
             self_supervised_learning_loss=True,
         ),
-        mcts_ctree=False,
+        mcts_ctree=True,
         cuda=True,
         env_type='not_board_games',
         game_segment_length=400,
