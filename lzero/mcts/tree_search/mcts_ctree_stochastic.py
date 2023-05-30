@@ -57,7 +57,7 @@ class StochasticMuZeroMCTSCtree(object):
         )
 
     @classmethod
-    def roots(cls: int, active_collect_env_num: int, legal_actions: List[Any]) -> "stochastic_mz_tree.Roots":
+    def roots(cls: int, active_collect_env_num: int, legal_actions: List[Any], chance_space_size: int=2) -> "stochastic_mz_tree.Roots":
         """
         Overview:
             The initialization of CRoots with root num and legal action lists.
@@ -66,7 +66,7 @@ class StochasticMuZeroMCTSCtree(object):
             - legal_action_list (:obj:`list`): the vector of the legal action of this root.
         """
         from lzero.mcts.ctree.ctree_stochastic_muzero import stochastic_mz_tree as ctree
-        return ctree.Roots(active_collect_env_num, legal_actions)
+        return ctree.Roots(active_collect_env_num, legal_actions, chance_space_size)
 
     def search(
             self, roots: Any, model: torch.nn.Module, latent_state_roots: List[Any], to_play_batch: Union[int,

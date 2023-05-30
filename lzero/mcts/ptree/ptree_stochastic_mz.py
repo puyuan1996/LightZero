@@ -345,12 +345,15 @@ def select_child(
     """
 
     if node.is_chance:
+        # print("root->is_chance: True ")
+
         # If the node is chance node, we sample from the prior outcome distribution.
         outcomes, probs = zip(*[(o, n.prior) for o, n in node.children.items()])
         outcome = np.random.choice(outcomes, p=probs)
+        print(outcome, probs)
         return outcome
-        # print(outcome, node.children[outcome])
 
+    # print("root->is_chance: False ")
     # If the node is decision node, we select the action with the highest ucb score.
     max_score = -np.inf
     epsilon = 0.000001

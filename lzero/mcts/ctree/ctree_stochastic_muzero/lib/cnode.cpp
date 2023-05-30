@@ -160,7 +160,8 @@ namespace tree
         {
             prior = policy[a] / policy_sum;
             std::vector<int> tmp_empty;
-            this->children[a] = CNode(prior, tmp_empty, is_chance = child_is_chance); // only for muzero/efficient zero, not support alphazero
+            this->children[a] = CNode(prior, tmp_empty, child_is_chance, this->chance_space_size); // only for muzero/efficient zero, not support alphazero
+            // this->children[a] = CNode(prior, tmp_empty, is_chance = child_is_chance); // only for muzero/efficient zero, not support alphazero
         }
         
         #ifdef _WIN32
@@ -322,7 +323,7 @@ namespace tree
         this->root_num = 0;
     }
 
-    CRoots::CRoots(int root_num, std::vector<std::vector<int> > &legal_actions_list)
+    CRoots::CRoots(int root_num, std::vector<std::vector<int> > &legal_actions_list, int chance_space_size=2)
     {
         /*
         Overview:
@@ -336,7 +337,9 @@ namespace tree
 
         for (int i = 0; i < root_num; ++i)
         {
-            this->roots.push_back(CNode(0, this->legal_actions_list[i]));
+            this->roots.push_back(CNode(0, this->legal_actions_list[i], false, chance_space_size));
+            // this->roots.push_back(CNode(0, this->legal_actions_list[i], false));
+
         }
     }
 
@@ -356,7 +359,7 @@ namespace tree
         */
         for (int i = 0; i < this->root_num; ++i)
         {
-            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i], false);
+            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i], true);
             this->roots[i].add_exploration_noise(root_noise_weight, noises[i]);
 
             this->roots[i].visit_count += 1;
@@ -375,7 +378,7 @@ namespace tree
         */
         for (int i = 0; i < this->root_num; ++i)
         {
-            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i], false);
+            this->roots[i].expand(to_play_batch[i], 0, i, rewards[i], policies[i], true);
 
             this->roots[i].visit_count += 1;
         }
@@ -518,6 +521,8 @@ namespace tree
                 min_max_stats.update(true_reward + discount_factor * node->value());
 
                 bootstrap_value = true_reward + discount_factor * bootstrap_value;
+                // std::cout << "to_play: " << to_play << std::endl;
+
             }
         }
         else
@@ -589,6 +594,8 @@ namespace tree
             - action: the action to select.
         */
         if (root->is_chance) {
+                // std::cout << "root->is_chance: True " << std::endl;
+
                 // If the node is a chance node, we sample from the prior outcome distribution.
                 std::vector<int> outcomes;
                 std::vector<double> probs;
@@ -607,6 +614,8 @@ namespace tree
 
             return outcome;
         }
+
+        // std::cout << "root->is_chance: False " << std::endl;
 
         float max_score = FLOAT_MIN;
         const float epsilon = 0.000001;
@@ -720,11 +729,15 @@ namespace tree
             int search_len = 0;
             results.search_paths[i].push_back(node);
 
+            // std::cout << "root->is_chance: " <<node->is_chance<< std::endl;
+            // node->is_chance=false;
+
             while (node->expanded())
             {
                 float mean_q = node->compute_mean_q(is_root, parent_q, discount_factor);
                 is_root = 0;
                 parent_q = mean_q;
+                // std::cout << "node->is_chance: " <<node->is_chance<< std::endl;
 
                 int action = cselect_child(node, min_max_stats_lst->stats_lst[i], pb_c_base, pb_c_init, discount_factor, mean_q, players);
                 if (players > 1)

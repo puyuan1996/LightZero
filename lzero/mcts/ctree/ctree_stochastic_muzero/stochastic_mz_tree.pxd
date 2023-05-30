@@ -48,8 +48,8 @@ cdef extern from "lib/cnode.h" namespace "tree":
 
     cdef cppclass CRoots:
         CRoots() except +
-        CRoots(int root_num, vector[vector[int]] legal_actions_list) except +
-        int root_num
+        CRoots(int root_num, vector[vector[int]] legal_actions_list, int chance_space_size) except +
+        int root_num, chance_space_size
         vector[CNode] roots
 
         void prepare(float root_noise_weight, const vector[vector[float]] &noises, const vector[float] &value_prefixs, const vector[vector[float]] &policies, vector[int] to_play_batch)

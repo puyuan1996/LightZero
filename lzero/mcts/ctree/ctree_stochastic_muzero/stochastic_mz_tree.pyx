@@ -28,9 +28,9 @@ cdef class Roots:
     cdef int root_num
     cdef CRoots *roots
 
-    def __cinit__(self, int root_num, vector[vector[int]] legal_actions_list):
+    def __cinit__(self, int root_num, vector[vector[int]] legal_actions_list, int chance_space_size):
         self.root_num = root_num
-        self.roots = new CRoots(root_num, legal_actions_list)
+        self.roots = new CRoots(root_num, legal_actions_list, chance_space_size)
 
     def prepare(self, float root_noise_weight, list noises, list value_prefix_pool, list policy_logits_pool,
                 vector[int] & to_play_batch):

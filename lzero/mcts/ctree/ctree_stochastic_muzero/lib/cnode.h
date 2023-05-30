@@ -52,9 +52,10 @@ namespace tree {
             int root_num;
             std::vector<CNode> roots;
             std::vector<std::vector<int> > legal_actions_list;
+            int chance_space_size;
 
             CRoots();
-            CRoots(int root_num, std::vector<std::vector<int> > &legal_actions_list);
+            CRoots(int root_num, std::vector<std::vector<int> > &legal_actions_list, int chance_space_size);
             ~CRoots();
 
             void prepare(float root_noise_weight, const std::vector<std::vector<float> > &noises, const std::vector<float> &rewards, const std::vector<std::vector<float> > &policies, std::vector<int> &to_play_batch);
