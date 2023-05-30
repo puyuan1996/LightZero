@@ -35,7 +35,7 @@ class Game2048Env(gym.Env):
         prob_random_agent=0.,
         max_episode_steps=int(1e4),
         is_collect=True,
-        ignore_legal_actions = True,
+        ignore_legal_actions=True,
     )
     metadata = {'render.modes': ['human', 'ansi', 'rgb_array']}
 

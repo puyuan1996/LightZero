@@ -25,14 +25,14 @@ update_per_collect = 1000
 batch_size = 256
 max_env_step = int(1e6)
 reanalyze_ratio = 0.
-chance_space_size = 2
+chance_space_size = 6
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
 atari_stochastic_muzero_config = dict(
     exp_name=
-    f'data_stochastic_mz_ctree/{env_name[:-14]}_stochastic_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_chance{chance_space_size}_seed0',
+    f'data_stochastic_mz_ctree/{env_name[:-14]}_stochastic_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_chance{chance_space_size}_ctree_seed0',
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,

@@ -11,7 +11,6 @@ import numpy as np
 
 
 def rule_based_search(grid: np.array, fast_search: bool = True) -> int:
-
     model1 = np.array([[16, 15, 14, 13], [9, 10, 11, 12], [8, 7, 6, 5], [1, 2, 2, 4]])
     model2 = np.array([[16, 15, 12, 4], [14, 13, 11, 3], [10, 9, 8, 2], [7, 6, 5, 1]])
     model3 = np.array([[16, 15, 14, 4], [13, 12, 11, 3], [10, 9, 8, 2], [7, 6, 5, 1]])
@@ -154,8 +153,6 @@ def generate(grid: np.array) -> np.array:
     return grid
 
 
-
-
 config = EasyDict(dict(
     env_name="game_2048_env_2048",
     save_replay_gif=False,
@@ -166,12 +163,14 @@ config = EasyDict(dict(
     obs_type='raw_observation',  # options=['raw_observation', 'dict_observation']
     reward_normalize=True,
     reward_scale=100,
-    max_tile=int(2**16),
+    max_tile=int(2 ** 16),
     delay_reward_step=0,
     prob_random_agent=0.,
     max_episode_steps=int(1e4),
     is_collect=False,
     is_encode_boarding=False,
+    ignore_legal_actions=True,
+
 ))
 
 if __name__ == "__main__":
@@ -182,13 +181,13 @@ if __name__ == "__main__":
     step = 0
     while True:
         # action = env.human_to_action()
-        print('='*20)
+        print('=' * 20)
         grid = obs.astype(np.int64)
         action = game_2048_env.random_action()
         action = rule_based_search(grid)
-        if(action == 1):
-            action=2
-        elif(action == 2):
+        if (action == 1):
+            action = 2
+        elif (action == 2):
             action = 1
         obs, reward, done, info = game_2048_env.step(action)
         step += 1

@@ -5,23 +5,23 @@ action_space_size = 4
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-# collector_env_num = 8
-# n_episode = 8
-# evaluator_env_num = 3
-# num_simulations = 50  # TODO(pu):100
-# update_per_collect = 200
-# batch_size = 256
-# max_env_step = int(1e6)
-# reanalyze_ratio = 0.
-
-collector_env_num = 1
-n_episode = 2
-evaluator_env_num = 1
-num_simulations = 5
-update_per_collect = 3
-batch_size = 5
+collector_env_num = 8
+n_episode = 8
+evaluator_env_num = 3
+num_simulations = 50  # TODO(pu):100
+update_per_collect = 200
+batch_size = 256
 max_env_step = int(1e6)
 reanalyze_ratio = 0.
+
+# collector_env_num = 1
+# n_episode = 2
+# evaluator_env_num = 1
+# num_simulations = 5
+# update_per_collect = 3
+# batch_size = 5
+# max_env_step = int(1e6)
+# reanalyze_ratio = 0.
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
@@ -45,11 +45,13 @@ game_2048_stochastic_muzero_config = dict(
         model=dict(
             observation_shape=(16, 4, 4),
             action_space_size=action_space_size,
+            chance_space_size=action_space_size,
             image_channel=16,
             # NOTE: whether to use the self_supervised_learning_loss. default is False
             self_supervised_learning_loss=True,
         ),
-        mcts_ctree=False,
+        # mcts_ctree=False,
+        mcts_ctree=True,
         cuda=True,
         env_type='not_board_games',
         game_segment_length=200,

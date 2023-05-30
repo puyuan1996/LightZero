@@ -11,6 +11,7 @@ config = EasyDict(dict(
     act_scale=True,
     channel_last=False,
     obs_type='raw_observation',  # options=['raw_observation', 'dict_observation']
+    ignore_legal_actions=False,
     reward_normalize=True,
     # reward_normalize=False,
     reward_scale=100,

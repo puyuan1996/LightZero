@@ -543,7 +543,7 @@ class StochasticMuZeroPolicy(Policy):
             ]
             if self._cfg.mcts_ctree:
                 # cpp mcts_tree
-                roots = MCTSCtree.roots(active_collect_env_num, legal_actions)
+                roots = MCTSCtree.roots(active_collect_env_num, legal_actions, self._cfg.model.chance_space_size)
             else:
                 # python mcts_tree
                 roots = MCTSPtree.roots(active_collect_env_num, legal_actions)
@@ -631,7 +631,7 @@ class StochasticMuZeroPolicy(Policy):
             legal_actions = [[i for i, x in enumerate(action_mask[j]) if x == 1] for j in range(active_eval_env_num)]
             if self._cfg.mcts_ctree:
                 # cpp mcts_tree
-                roots = MCTSCtree.roots(active_eval_env_num, legal_actions)
+                roots = MCTSCtree.roots(active_eval_env_num, legal_actions, self._cfg.model.chance_space_size)
             else:
                 # python mcts_tree
                 roots = MCTSPtree.roots(active_eval_env_num, legal_actions)
