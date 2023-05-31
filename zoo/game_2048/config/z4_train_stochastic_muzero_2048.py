@@ -9,7 +9,7 @@ chance_space_size=  4
 collector_env_num = 8
 n_episode = 8
 evaluator_env_num = 3
-num_simulations = 100  # TODO(pu):100
+num_simulations = 50  # TODO(pu):100
 update_per_collect = 200
 batch_size = 256
 max_env_step = int(1e8)
@@ -34,7 +34,7 @@ game_2048_stochastic_muzero_config = dict(
         env_name=env_name,
         obs_shape=(16, 4, 4),
         obs_type='dict_observation',
-        reward_normalize=True,
+        reward_normalize=False,
         reward_scale=100,
         max_tile=int(2**16),  # 2**11=2048, 2**16=65536
         collector_env_num=collector_env_num,

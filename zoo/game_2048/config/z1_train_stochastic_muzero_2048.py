@@ -2,32 +2,33 @@ from easydict import EasyDict
 
 env_name = 'game_2048'
 action_space_size = 4
+chance_space_size=  4
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-# collector_env_num = 8
-# n_episode = 8
-# evaluator_env_num = 3
-# num_simulations = 50  # TODO(pu):100
-# update_per_collect = 200
-# batch_size = 256
-# max_env_step = int(1e6)
-# reanalyze_ratio = 0.
-
 collector_env_num = 8
 n_episode = 8
 evaluator_env_num = 3
-num_simulations = 50
-update_per_collect = 100
+num_simulations = 50  # TODO(pu):100
+update_per_collect = 200
 batch_size = 256
 max_env_step = int(1e8)
 reanalyze_ratio = 0.
+
+# collector_env_num = 1
+# n_episode = 2
+# evaluator_env_num = 1
+# num_simulations = 5
+# update_per_collect = 3
+# batch_size = 5
+# max_env_step = int(1e6)
+# reanalyze_ratio = 0.
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
 game_2048_stochastic_muzero_config = dict(
-    exp_name=f'data_mz_ctree/game1_2048_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw2_rew-morm-true_seed0',
+    exp_name=f'data_mz_ctree/game_2048_stochastic_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_bs{batch_size}_sslw2_rew-morm-true_seed0',
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,
@@ -45,9 +46,12 @@ game_2048_stochastic_muzero_config = dict(
         model=dict(
             observation_shape=(16, 4, 4),
             action_space_size=action_space_size,
+            chance_space_size=chance_space_size,
             image_channel=16,
             # NOTE: whether to use the self_supervised_learning_loss. default is False
-            self_supervised_learning_loss=True,
+            self_supervised_learning_loss=True,  # default is False
+            discrete_action_encoding_type='one_hot',
+            norm_type='BN', 
         ),
         mcts_ctree=True,
         cuda=True,

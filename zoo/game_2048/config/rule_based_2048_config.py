@@ -163,7 +163,7 @@ config = EasyDict(dict(
     replay_path=None,
     act_scale=True,
     channel_last=True,
-    obs_type='raw_observation',  # options=['raw_observation', 'dict_observation']
+    obs_type='array',  # options=['raw_observation', 'dict_observation']
     reward_normalize=True,
     reward_scale=100,
     max_tile=int(2**16),
@@ -171,7 +171,8 @@ config = EasyDict(dict(
     prob_random_agent=0.,
     max_episode_steps=int(1e4),
     is_collect=False,
-    is_encode_boarding=False,
+    ignore_legal_actions=True,
+    # is_encode_boarding=False,
 ))
 
 if __name__ == "__main__":

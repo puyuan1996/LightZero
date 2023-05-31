@@ -27,13 +27,13 @@ class Game2048Env(gym.Env):
         replay_path=None,
         act_scale=True,
         channel_last=True,
-        obs_type='raw_observation',  # options=['raw_observation', 'dict_observation']
+        obs_type='raw_observation',  # options=['raw_observation', 'dict_observation', 'array']
         reward_normalize=True,
         reward_scale=100,
         max_tile=int(2**16),  # 2**11=2048, 2**16=65536
         delay_reward_step=0,
         prob_random_agent=0.,
-        max_episode_steps=int(1e4),
+        max_episode_steps=int(1e6),
         is_collect=True,
         ignore_legal_actions = True,
     )
@@ -139,7 +139,10 @@ class Game2048Env(gym.Env):
 
         if self.obs_type == 'dict_observation':
             observation = {'observation': observation, 'action_mask': action_mask, 'to_play': -1}
-
+        elif self.obs_type == 'array':
+            observation = self.board 
+        else:
+            observation = observation
         return observation
 
     def step(self, action):
@@ -186,6 +189,10 @@ class Game2048Env(gym.Env):
 
         if self.obs_type == 'dict_observation':
             observation = {'observation': observation, 'action_mask': action_mask, 'to_play': -1}
+        elif self.obs_type == 'array':
+            observation = self.board 
+        else:
+            observation = observation
 
         if self.reward_normalize:
             reward_normalize = reward_collect
@@ -196,7 +203,7 @@ class Game2048Env(gym.Env):
             reward = reward_eval
         reward = to_ndarray([reward]).astype(np.float32) 
 
-        info = {"raw_reward": reward, "max_tile": self.highest(), 'highest': self.highest()}
+        info = {"raw_reward": reward_eval, "max_tile": self.highest(), 'highest': self.highest()}
 
         if done:
             info['eval_episode_return'] = self._final_eval_reward
@@ -485,6 +492,7 @@ class Game2048Env(gym.Env):
     def create_collector_env_cfg(cfg: dict) -> List[dict]:
         collector_env_num = cfg.pop('collector_env_num')
         cfg = copy.deepcopy(cfg)
+        # cfg.reward_normalize = True
         # when collect data, sometimes we need to normalize the reward
         # reward_normalize is determined by the config.
         cfg.is_collect = True
