@@ -36,6 +36,7 @@ class Game2048Env(gym.Env):
         max_episode_steps=int(1e6),
         is_collect=True,
         ignore_legal_actions = True,
+        need_flatten = False,
     )
     metadata = {'render.modes': ['human', 'ansi', 'rgb_array']}
 
@@ -61,6 +62,7 @@ class Game2048Env(gym.Env):
         self.max_episode_steps = cfg.max_episode_steps
         self.is_collect = cfg.is_collect
         self.ignore_legal_actions = cfg.ignore_legal_actions
+        self.need_flatten = cfg.need_flatten
 
         self.size = 4
         self.w = self.size
@@ -136,6 +138,8 @@ class Game2048Env(gym.Env):
             # (W, H, C) -> (C, W, H)
             # e.g. (4, 4, 16) -> (16, 4, 4)
             observation = np.transpose(observation, [2, 0, 1])
+        if self.need_flatten:
+            observation = observation.reshape(-1)
 
         if self.obs_type == 'dict_observation':
             observation = {'observation': observation, 'action_mask': action_mask, 'to_play': -1}
@@ -183,7 +187,9 @@ class Game2048Env(gym.Env):
             # (W, H, C) -> (C, W, H)
             # e.g. (4, 4, 16) -> (16, 4, 4)
             observation = np.transpose(observation, [2, 0, 1])
-
+            
+        if self.need_flatten:
+            observation = observation.reshape(-1)
         action_mask = np.zeros(4, 'int8')
         action_mask[self.legal_actions] = 1
 
