@@ -131,7 +131,7 @@ class StochasticMuZeroModel(nn.Module):
         )
         
         self.encoder = Encoder_function(
-            observation_shape, action_space_size
+            observation_shape, chance_space_size
         )
         self.dynamics_network = DynamicsNetwork(
             num_res_blocks,

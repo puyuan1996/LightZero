@@ -62,7 +62,8 @@ class Node:
             self.reward = 0.0
 
             if self.legal_actions is None:
-                self.legal_actions = np.arange(len(policy_logits))
+                # self.legal_actions = np.arange(len(policy_logits))
+                self.legal_actions = np.arange(self.chance_space_size)
             self.latent_state_index_in_search_path = latent_state_index_in_search_path
             self.latent_state_index_in_batch = latent_state_index_in_batch
             policy_values = torch.softmax(torch.tensor([policy_logits[a] for a in self.legal_actions]), dim=0).tolist()
@@ -71,12 +72,12 @@ class Node:
                 self.children[action] = Node(prior, is_chance=child_is_chance)
         else:
             child_is_chance = True
-
-            self.legal_actions = np.arange(self.chance_space_size)
+            #self.legal_actions = np.arange(self.chance_space_size)
+            self.legal_actions = np.arange(len(policy_logits))
             self.latent_state_index_in_search_path = latent_state_index_in_search_path
             self.latent_state_index_in_batch = latent_state_index_in_batch
             policy_values = torch.softmax(torch.tensor([policy_logits[a] for a in self.legal_actions]), dim=0).tolist()
-            policy = {legal_chance_action: policy_values[index] for index, legal_chance_action in enumerate(self.legal_actions)}
+            policy = {legal_action: policy_values[index] for index, legal_action in enumerate(self.legal_actions)}
             for action, prior in policy.items():
                 self.children[action] = Node(prior, is_chance=child_is_chance)
 
@@ -350,7 +351,7 @@ def select_child(
         # If the node is chance node, we sample from the prior outcome distribution.
         outcomes, probs = zip(*[(o, n.prior) for o, n in node.children.items()])
         outcome = np.random.choice(outcomes, p=probs)
-        print(outcome, probs)
+        # print(outcome, probs)
         return outcome
 
     # print("root->is_chance: False ")
@@ -581,6 +582,7 @@ def batch_backpropagate(
         results: SearchResults,
         to_play: list = None,
         is_chance_list: list = None,
+        leaf_idx_list: list = None,
 ) -> None:
     """
     Overview:
@@ -595,18 +597,22 @@ def batch_backpropagate(
         - results (:obj:`Class List`): the search results.
         - to_play (:obj:`Class List`):  the batch of which player is playing on this node.
     """
-    for i in range(results.num):
+    if leaf_idx_list is None:
+        leaf_idx_list = list(range(results.num))
+    # for i in range(results.num):
+    # for i in leaf_idx_list:
+    for leaf_order, i in enumerate(leaf_idx_list):
         # ****** expand the leaf node ******
         if to_play is None:
             # set to_play=-1, because two_player mode to_play = {1,2}
-            results.nodes[i].expand(-1, latent_state_index_in_search_path, i, value_prefixs[i], policies[i], is_chance_list[i])
+            results.nodes[i].expand(-1, latent_state_index_in_search_path, i, value_prefixs[leaf_order], policies[leaf_order], is_chance_list[i])
         else:
-            results.nodes[i].expand(to_play[i], latent_state_index_in_search_path, i, value_prefixs[i], policies[i], is_chance_list[i])
+            results.nodes[i].expand(to_play[i], latent_state_index_in_search_path, i, value_prefixs[leaf_order], policies[leaf_order], is_chance_list[i])
 
         # ****** backpropagate ******
         if to_play is None:
-            backpropagate(results.search_paths[i], min_max_stats_lst.stats_lst[i], 0, values[i], discount_factor)
+            backpropagate(results.search_paths[i], min_max_stats_lst.stats_lst[i], 0, values[leaf_order], discount_factor)
         else:
             backpropagate(
-                results.search_paths[i], min_max_stats_lst.stats_lst[i], to_play[i], values[i], discount_factor
+                results.search_paths[i], min_max_stats_lst.stats_lst[i], to_play[i], values[leaf_order], discount_factor
             )

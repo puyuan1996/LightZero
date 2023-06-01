@@ -196,20 +196,49 @@ class StochasticMuZeroMCTSPtree(object):
                 process_nodes(chance_nodes, True)
                 process_nodes(decision_nodes, False)
 
-                latent_state_batch = np.concatenate(latent_state_batch, axis=0)
-                value_batch = np.concatenate(value_batch, axis=0)
-                reward_batch = np.concatenate(reward_batch, axis=0)
-                policy_logits_batch = np.concatenate(policy_logits_batch, axis=0)
-                latent_state_batch_in_search_path.append(latent_state_batch)
+                # latent_state_batch_chance = [latent_state_batch[leaf_idx] for leaf_idx in chance_nodes]
+                # latent_state_batch_decision = [latent_state_batch[leaf_idx] for leaf_idx in decision_nodes]
+                value_batch_chance = [value_batch[leaf_idx] for leaf_idx in chance_nodes]
+                value_batch_decision = [value_batch[leaf_idx] for leaf_idx in decision_nodes]
+                reward_batch_chance = [reward_batch[leaf_idx] for leaf_idx in chance_nodes]
+                reward_batch_decision = [reward_batch[leaf_idx] for leaf_idx in decision_nodes]
+                policy_logits_batch_chance = [policy_logits_batch[leaf_idx] for leaf_idx in chance_nodes]
+                policy_logits_batch_decision = [policy_logits_batch[leaf_idx] for leaf_idx in decision_nodes]             
 
+                latent_state_batch = np.concatenate(latent_state_batch, axis=0)
+                latent_state_batch_in_search_path.append(latent_state_batch)
+                current_latent_state_index = simulation_index + 1
+
+                if(len(chance_nodes) > 0):
+                    value_batch_chance = np.concatenate(value_batch_chance, axis=0)
+                    reward_batch_chance = np.concatenate(reward_batch_chance, axis=0)
+                    policy_logits_batch_chance = np.concatenate(policy_logits_batch_chance, axis=0)
+                    tree_muzero.batch_backpropagate(
+                        current_latent_state_index, discount_factor, reward_batch_chance, value_batch_chance, policy_logits_batch_chance,
+                        min_max_stats_lst, results, virtual_to_play, child_is_chance_batch, chance_nodes
+                    )
+                if(len(decision_nodes)>0):
+                    value_batch_decision = np.concatenate(value_batch_decision, axis=0)
+                    reward_batch_decision = np.concatenate(reward_batch_decision, axis=0)
+                    policy_logits_batch_decision = np.concatenate(policy_logits_batch_decision, axis=0)
+                    tree_muzero.batch_backpropagate(
+                        current_latent_state_index, discount_factor, reward_batch_decision, value_batch_decision, policy_logits_batch_decision,
+                        min_max_stats_lst, results, virtual_to_play, child_is_chance_batch, decision_nodes
+                    )
+
+                # latent_state_batch = np.concatenate(latent_state_batch, axis=0)
+                # value_batch = np.concatenate(value_batch, axis=0)
+                # reward_batch = np.concatenate(reward_batch, axis=0)
+                # policy_logits_batch = np.concatenate(policy_logits_batch, axis=0)
+                # latent_state_batch_in_search_path.append(latent_state_batch)
 
                 # In ``batch_backpropagate()``, we first expand the leaf node using ``the policy_logits`` and
                 # ``reward`` predicted by the model, then perform backpropagation along the search path to update the
                 # statistics.
 
                 # NOTE: simulation_index + 1 is very important, which is the depth of the current leaf node.
-                current_latent_state_index = simulation_index + 1
-                tree_muzero.batch_backpropagate(
-                    current_latent_state_index, discount_factor, reward_batch, value_batch, policy_logits_batch,
-                    min_max_stats_lst, results, virtual_to_play, child_is_chance_batch
-                )
+                # current_latent_state_index = simulation_index + 1
+                # tree_muzero.batch_backpropagate(
+                #     current_latent_state_index, discount_factor, reward_batch, value_batch, policy_logits_batch,
+                #     min_max_stats_lst, results, virtual_to_play, child_is_chance_batch
+                # )
