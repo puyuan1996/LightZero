@@ -73,14 +73,14 @@ cdef class Node:
         self.cnode.expand(to_play, current_latent_state_index, batch_index, value_prefix, cpolicy, is_chance)
 
 def batch_backpropagate(int current_latent_state_index, float discount_factor, list value_prefixs, list values, list policies,
-                         MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_play_batch, list is_chance_list):
+                         MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_play_batch, list is_chance_list, list leaf_idx_list):
     cdef int i
     cdef vector[float] cvalue_prefixs = value_prefixs
     cdef vector[float] cvalues = values
     cdef vector[vector[float]] cpolicies = policies
 
     cbatch_backpropagate(current_latent_state_index, discount_factor, cvalue_prefixs, cvalues, cpolicies,
-                          min_max_stats_lst.cmin_max_stats_lst, results.cresults, to_play_batch, is_chance_list)
+                          min_max_stats_lst.cmin_max_stats_lst, results.cresults, to_play_batch, is_chance_list, leaf_idx_list)
 
 def batch_traverse(Roots roots, int pb_c_base, float pb_c_init, float discount_factor, MinMaxStatsList min_max_stats_lst,
                    ResultsWrapper results, list virtual_to_play_batch):

@@ -555,7 +555,7 @@ namespace tree
         }
     }
 
-    void cbatch_backpropagate(int current_latent_state_index, float discount_factor, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float> > &policies, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, std::vector<int> &to_play_batch, std::vector<bool> &is_chance_list)
+    void cbatch_backpropagate(int current_latent_state_index, float discount_factor, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float> > &policies, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, std::vector<int> &to_play_batch, std::vector<bool> &is_chance_list, std::vector<int> &leaf_idx_list)
     {
         /*
         Overview:
@@ -570,11 +570,31 @@ namespace tree
             - results: the search results.
             - to_play_batch: the batch of which player is playing on this node.
         */
-        for (int i = 0; i < results.num; ++i)
-        {
-            results.nodes[i]->expand(to_play_batch[i], current_latent_state_index, i, value_prefixs[i], policies[i], is_chance_list[i]);
-            cbackpropagate(results.search_paths[i], min_max_stats_lst->stats_lst[i], to_play_batch[i], values[i], discount_factor);
+
+        if (leaf_idx_list.empty()) {
+            leaf_idx_list.resize(results.num);
+            for (int i = 0; i < results.num; ++i) {
+                leaf_idx_list[i] = i;
+            }
         }
+
+        for (auto leaf_order = 0; leaf_order < leaf_idx_list.size(); ++leaf_order) {
+            int i = leaf_idx_list[leaf_order];
+            // Your code here
+        }
+        for (int leaf_order = 0; leaf_order < leaf_idx_list.size(); ++leaf_order)
+        {
+            int i = leaf_idx_list[leaf_order];
+            results.nodes[i]->expand(to_play_batch[i], current_latent_state_index, i, value_prefixs[leaf_order], policies[leaf_order], is_chance_list[i]);
+            cbackpropagate(results.search_paths[i], min_max_stats_lst->stats_lst[i], to_play_batch[i], values[leaf_order], discount_factor);
+        }
+
+
+        // for (int i = 0; i < results.num; ++i)
+        // {
+        //     results.nodes[i]->expand(to_play_batch[i], current_latent_state_index, i, value_prefixs[i], policies[i], is_chance_list[i]);
+        //     cbackpropagate(results.search_paths[i], min_max_stats_lst->stats_lst[i], to_play_batch[i], values[i], discount_factor);
+        // }
     }
 
     int cselect_child(CNode *root, tools::CMinMaxStats &min_max_stats, int pb_c_base, float pb_c_init, float discount_factor, float mean_q, int players)

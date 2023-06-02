@@ -5,7 +5,7 @@
     "distutils": {
         "depends": [],
         "include_dirs": [
-            "/tmp/pip-build-env-ukmbsn1n/overlay/lib/python3.8/site-packages/numpy/core/include"
+            "/tmp/pip-build-env-bunncag0/overlay/lib/python3.8/site-packages/numpy/core/include"
         ],
         "language": "c++",
         "name": "zoo.board_games.tictactoe.envs.get_done_winner_cython",
