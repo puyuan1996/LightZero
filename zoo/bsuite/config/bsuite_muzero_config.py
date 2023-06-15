@@ -1,7 +1,7 @@
 from easydict import EasyDict
 
 # options={'memory_len/0', 'memory_len/9', 'memory_len/17', 'memory_len/20', 'memory_len/22', 'memory_size/0', 'bsuite_swingup/0', 'bandit_noise/0'}
-env_name = 'memory_len/9'
+env_name = 'memory_len/0'
 
 
 if env_name in ['memory_len/0', 'memory_len/9', 'memory_len/17', 'memory_len/20', 'memory_len/22']:
@@ -29,7 +29,7 @@ evaluator_env_num = 3
 num_simulations = 50
 update_per_collect = 100
 batch_size = 256
-max_env_step = int(5e5)
+max_env_step = int(2e5)
 reanalyze_ratio = 0
 # ==============================================================
 # end of the most frequently changed config specified by the user

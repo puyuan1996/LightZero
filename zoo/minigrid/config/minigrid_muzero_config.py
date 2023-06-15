@@ -1,16 +1,24 @@
 from easydict import EasyDict
 
-# env_name = 'MiniGrid-Empty-8x8-v0'
-# max_env_step = int(1e6)
-
+env_name = 'MiniGrid-Empty-8x8-v0'
 # env_name = 'MiniGrid-FourRooms-v0'
-# max_env_step = int(2e6)
-
-env_name = 'MiniGrid-DoorKey-8x8-v0'
-max_env_step = int(5e6)
-
+# env_name = 'MiniGrid-DoorKey-8x8-v0'
+# env_name = 'MiniGrid-DoorKey-16x16-v0'
 # typical MiniGrid env id: {'MiniGrid-Empty-8x8-v0', 'MiniGrid-FourRooms-v0', 'MiniGrid-DoorKey-8x8-v0','MiniGrid-DoorKey-16x16-v0'},
 # please refer to https://github.com/Farama-Foundation/MiniGrid for details.
+
+if env_name in ['MiniGrid-Empty-8x8-v0']:
+    max_env_step = int(1e6)
+    threshold_training_steps_for_final_temperature = int(5e4)
+elif env_name in ['MiniGrid-FourRooms-v0']:
+    max_env_step = int(5e6)
+    threshold_training_steps_for_final_temperature = int(5e5)
+elif env_name in ['MiniGrid-DoorKey-8x8-v0']:
+    max_env_step = int(20e6)
+    threshold_training_steps_for_final_temperature = int(1e6)
+elif env_name in ['MiniGrid-DoorKey-16x16-v0']:
+    max_env_step = int(40e6)
+    threshold_training_steps_for_final_temperature = int(1e6)
 
 # ==============================================================
 # begin of the most frequently changed config specified by the user
@@ -38,8 +46,6 @@ eval_sample_action = False
 
 policy_entropy_loss_weight = 0.
 # policy_entropy_loss_weight = 0.005
-# threshold_training_steps_for_final_temperature = int(5e4)
-threshold_training_steps_for_final_temperature = int(5e5)
 eps_greedy_exploration_in_collect = False
 # eps_greedy_exploration_in_collect = True
 
@@ -50,7 +56,7 @@ eps_greedy_exploration_in_collect = False
 
 minigrid_muzero_config = dict(
     exp_name=f'data_mz_ctree/{env_name}_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_'
-             f'eval-sample-{eval_sample_action}_pelw{policy_entropy_loss_weight}_temp-final-steps-{threshold_training_steps_for_final_temperature}_collect-eps-{eps_greedy_exploration_in_collect}-decay-linear-2e5-env_seed{seed}',
+             f'eval-sample-{eval_sample_action}_pelw{policy_entropy_loss_weight}_temp-final-steps-{threshold_training_steps_for_final_temperature}_collect-eps-{eps_greedy_exploration_in_collect}-decay-linear-2e5-env_seed{seed}_trueenv',
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,

@@ -1,7 +1,7 @@
 from easydict import EasyDict
 
 # options={'memory_len/0', 'memory_len/9', 'memory_len/17', 'memory_len/20', 'memory_len/22', 'memory_size/0', 'bsuite_swingup/0', 'bandit_noise/0'}
-env_name = 'memory_len/9'
+env_name = 'memory_len/0'
 
 
 if env_name in ['memory_len/0', 'memory_len/9', 'memory_len/17', 'memory_len/20', 'memory_len/22']:
@@ -30,7 +30,7 @@ K = 2  # num_of_sampled_actions
 num_simulations = 50
 update_per_collect = 100
 batch_size = 256
-max_env_step = int(5e5)
+max_env_step = int(2e5)
 reanalyze_ratio = 0.
 # ==============================================================
 # end of the most frequently changed config specified by the user
@@ -67,7 +67,7 @@ bsuite_sampled_efficientzero_config = dict(
         game_segment_length=50,
         update_per_collect=update_per_collect,
         batch_size=batch_size,
-        optim_type='Adam',
+        optim_type='AdamW',
         lr_piecewise_constant_decay=False,
         learning_rate=0.003,
         num_simulations=num_simulations,
