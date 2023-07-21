@@ -1,3 +1,9 @@
+"""
+This is an illustrative example of Python interfacing with a MCTS (Monte Carlo Tree Search) object implemented in C++. 
+Please note that this code is not designed for actual execution. 
+It serves as a conceptual demonstration, providing an understanding of how Python can interact with C++ objects, 
+specifically within the context of MCTS.
+"""
 import sys
 sys.path.append('/Users/puyuan/code/LightZero/lzero/mcts/ctree/alphazero/ctree_alphazero/build')
 
