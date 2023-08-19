@@ -1,7 +1,8 @@
 from easydict import EasyDict
 
 # options={'PongNoFrameskip-v4', 'QbertNoFrameskip-v4', 'MsPacmanNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4', 'BreakoutNoFrameskip-v4', ...}
-env_name = 'PongNoFrameskip-v4'
+# env_name = 'PongNoFrameskip-v4'
+env_name = 'MsPacmanNoFrameskip-v4'
 
 if env_name == 'PongNoFrameskip-v4':
     action_space_size = 6
@@ -17,23 +18,30 @@ elif env_name == 'BreakoutNoFrameskip-v4':
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-collector_env_num = 8
-n_episode = 8
+# collector_env_num = 8
+# n_episode = 8
+collector_env_num = 16
+n_episode = 16
 evaluator_env_num = 3
 num_simulations = 50
-update_per_collect = 1000
-batch_size = 256
-max_env_step = int(1e6)
-reanalyze_ratio = 0.
+# update_per_collect = 1000
+# batch_size = 256
+update_per_collect = None
+model_update_ratio = 0.25
+batch_size = 1024
+num_res_blocks = 5
 
-eps_greedy_exploration_in_collect = False
+max_env_step = int(50e6)
+reanalyze_ratio = 0.
+eps_greedy_exploration_in_collect = True
+use_priority = True
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
 atari_muzero_config = dict(
     exp_name=
-    f'data_mz_ctree/{env_name[:-14]}_muzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_seed0',
+    f'data_mz_ctree/{env_name[:-14]}_muzero_ns{num_simulations}_upc{update_per_collect}_mur{model_update_ratio}_nrb{num_res_blocks}_bs{batch_size}_eps1e5_prio{use_priority}_rr{reanalyze_ratio}_seed0',
     env=dict(
         stop_value=int(1e6),
         env_name=env_name,
@@ -52,7 +60,10 @@ atari_muzero_config = dict(
             self_supervised_learning_loss=True,  # default is False
             discrete_action_encoding_type='one_hot',
             norm_type='BN',
+            num_res_blocks=num_res_blocks,
         ),
+        model_update_ratio=model_update_ratio,
+        use_priority=use_priority,
         cuda=True,
         env_type='not_board_games',
         game_segment_length=400,
