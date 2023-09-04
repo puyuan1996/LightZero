@@ -342,7 +342,7 @@ namespace tree
             // std::vector<float> sampled_actions_probs;
             std::default_random_engine generator(seed);
 
-            //  有放回抽样
+            //  sampling with replacement
             // for (int i = 0; i < num_of_sampled_actions; ++i)
             // {
             //     float sampled_action_prob = 1;
@@ -362,9 +362,9 @@ namespace tree
             //     std::cout << "sampled_actions_log_probs" << '[' << i << ']' << sampled_actions_log_probs[i] << std::endl;
             // }
 
-            // 每个节点的legal_actions应该为一个固定离散集合，所以采用无放回抽样
+            // The legal_actions for each node should be a fixed discrete set, so non-replacement sampling is employed.
             // std::cout << "position uniform_distribution init" << std::endl;
-            std::uniform_real_distribution<double> uniform_distribution(0.0, 1.0); //均匀分布
+            std::uniform_real_distribution<double> uniform_distribution(0.0, 1.0); // uniform distribution
             // std::cout << "position uniform_distribution done" << std::endl;
             std::vector<double> disturbed_probs;
             std::vector<std::pair<int, double> > disc_action_with_probs;
@@ -380,11 +380,8 @@ namespace tree
             // After sorting, the first vector is the index, and the second vector is the probability value after perturbation sorted from large to small.
             for (size_t iter = 0; iter < disturbed_probs.size(); iter++)
             {
-                #ifdef __APPLE__
-                    disc_action_with_probs.__emplace_back(std::make_pair(iter, disturbed_probs[iter]));
-                #else
-                    disc_action_with_probs.emplace_back(std::make_pair(iter, disturbed_probs[iter]));
-                #endif
+                disc_action_with_probs.emplace_back(std::make_pair(iter, disturbed_probs[iter])); // more efficient than push_back
+                // disc_action_with_probs.push_back(std::pair<int, double>(iter, disturbed_probs[iter]));
             }
 
             std::sort(disc_action_with_probs.begin(), disc_action_with_probs.end(), cmp);
