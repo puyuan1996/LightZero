@@ -122,7 +122,7 @@ class StochasticMuZeroModel(nn.Module):
             downsample,
         )
 
-        self.chance_encoder = ChanceEncoder(
+        self.encoder = ChanceEncoder(
             observation_shape, chance_space_size
         )
         self.dynamics_network = DynamicsNetwork(
@@ -289,7 +289,7 @@ class StochasticMuZeroModel(nn.Module):
         return latent_state
 
     def chance_encode(self, observation: torch.Tensor):
-        output = self.chance_encoder(observation)
+        output = self.encoder(observation)
         return output
 
     def _prediction(self, latent_state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -807,7 +807,7 @@ class ChanceEncoder(nn.Module):
         # Specify the action space for the model
         self.action_space = action_dimension
         # Define the encoder, which transforms observations into a latent space
-        self.chance_encoder = ChanceEncoderBackbone(observation_space_dimensions, action_dimension)
+        self.encoder = ChanceEncoderBackbone(observation_space_dimensions, action_dimension)
         # Using the Straight Through Estimator method for backpropagation
         self.onehot_argmax = StraightThroughEstimator()
 
@@ -829,7 +829,7 @@ class ChanceEncoder(nn.Module):
             chance_encoding (Tensor): Encoding of the input observation tensor.
         """
         # Apply the encoder to the observation
-        chance_encoding = self.chance_encoder(observations)
+        chance_encoding = self.encoder(observations)
         # Apply one-hot argmax to the encoding
         chance_onehot = self.onehot_argmax(chance_encoding)
         return chance_encoding, chance_onehot

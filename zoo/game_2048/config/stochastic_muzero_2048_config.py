@@ -7,26 +7,30 @@ from easydict import EasyDict
 env_name = 'game_2048'
 action_space_size = 4
 use_ture_chance_label_in_chance_encoder = True  # option: {True, False}
-collector_env_num = 8
-n_episode = 8
-evaluator_env_num = 3
-num_simulations = 100
-update_per_collect = 200
-batch_size = 512
-max_env_step = int(1e9)
-reanalyze_ratio = 0.
+# use_ture_chance_label_in_chance_encoder = False  # option: {True, False}
+
 num_of_possible_chance_tile = 2
 chance_space_size = 16 * num_of_possible_chance_tile
 
-# debug config
-# collector_env_num = 1
-# n_episode = 1
-# evaluator_env_num = 1
-# num_simulations = 5
-# update_per_collect = 3
-# batch_size = 5
-# max_env_step = int(1e6)
+# collector_env_num = 8
+# n_episode = 8
+# evaluator_env_num = 3
+# num_simulations = 100
+# update_per_collect = 200
+# batch_size = 512
+# max_env_step = int(1e9)
 # reanalyze_ratio = 0.
+
+
+# debug config
+collector_env_num = 1
+n_episode = 1
+evaluator_env_num = 1
+num_simulations = 5
+update_per_collect = 2
+batch_size = 10240
+max_env_step = int(1e6)
+reanalyze_ratio = 0.
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
@@ -103,4 +107,4 @@ create_config = game_2048_stochastic_muzero_create_config
 
 if __name__ == "__main__":
     from lzero.entry import train_muzero
-    train_muzero([main_config, create_config], seed=0, max_env_step=max_env_step)
+    train_muzero([main_config, create_config], model_path=main_config.policy.model_path, seed=0, max_env_step=max_env_step)
