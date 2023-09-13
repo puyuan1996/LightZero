@@ -1,0 +1,32 @@
+# Start from the latest Fedora base image
+FROM fedora:latest
+
+# Install necessary packages and clean up in one RUN to reduce image size
+RUN dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+    && dnf -y update \
+    && dnf -y install git python3-virtualenv python3-pip python3-devel ffmpeg-libs SDL2-devel SDL2_image-devel SDL2_mixer-devel SDL2_ttf-devel portmidi-devel libavdevice libavc1394-devel zlibrary-devel ccache mesa-libGL mesa-libGL-devel libjpeg-devel \
+    && dnf clean all
+
+# Print the Linux version for debugging purposes
+RUN uname -a
+
+# Clone the LightZero repository
+RUN git clone -b dev-docker https://github.com/opendilab/LightZero.git
+
+# Switch to the LightZero directory
+WORKDIR "/LightZero"
+
+# Create a Python virtual environment named "fedora-lz"
+RUN python3 -m venv fedora-lz
+
+# Upgrade pip in the virtual environment to the latest version
+RUN /LightZero/fedora-lz/bin/pip install --upgrade pip
+
+## Install DI-engine with common environment support
+#RUN /LightZero/fedora-lz/bin/pip install DI-engine[common_env]==0.4.9 --default-timeout=1000 -i https://mirrors.aliyun.com/pypi/simple/
+#
+## Install gym package. Please note to accept the rom license since some environments may require it.
+#RUN /LightZero/fedora-lz/bin/pip install gym[accept-rom-license]==0.26.2
+
+# Install the LightZero package in editable mode
+RUN /LightZero/fedora-lz/bin/pip install -e .

@@ -1,0 +1,40 @@
+# Start from the latest Fedora base image
+FROM fedora:latest
+
+# Install necessary packages and clean up in one RUN to reduce image size
+RUN dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+    && dnf -y update \
+    && dnf -y install wget gcc openssl-devel bzip2-devel libffi-devel make \
+    && wget https://www.python.org/ftp/python/3.8.12/Python-3.8.12.tgz \
+    && tar xvf Python-3.8.12.tgz \
+    && cd Python-3.8.12 \
+    && ./configure --enable-optimizations \
+    && make altinstall \
+    && cd .. && rm -rf Python-3.8.12.tgz Python-3.8.12 \
+    && dnf -y install git python38-virtualenv python38-pip ffmpeg-libs SDL2-devel SDL2_image-devel SDL2_mixer-devel SDL2_ttf-devel portmidi-devel libavdevice libavc1394-devel zlibrary-devel ccache mesa-libGL mesa-libGL-devel libjpeg-devel \
+    && dnf clean all
+
+# Print the Linux version for debugging purposes
+RUN uname -a
+
+# Clone the LightZero repository
+RUN git clone https://github.com/opendilab/LightZero.git
+
+# Switch to the LightZero directory
+WORKDIR "/LightZero"
+
+# Create a Python virtual environment named "fedora-py38-lz"
+RUN python3 -m venv fedora-py38-lz
+
+# Upgrade pip in the virtual environment to the latest version
+RUN /LightZero/fedora-py38-lz/bin/pip install --upgrade pip
+
+# gym[all] 0.25.1 depends on ale-py~=0.7.5,
+# python3.8 support ale-py 0.7.5, but python3.11 not support ale-py 0.7.5
+#RUN /LightZero/fedora-lz/bin/pip install ale-py==0.7.5
+
+# Install the LightZero package in editable mode
+RUN /LightZero/fedora-py38-lz/bin/pip install -e .
+
+
+# build命令： docker build -t fedora-py38-lz .

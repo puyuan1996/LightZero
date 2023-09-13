@@ -1,0 +1,25 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Update and install gcc, g++, and swig
+RUN apt-get update && \
+    apt-get install -y gcc g++ swig && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install git
+RUN apt-get update --fix-missing && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Update pip and setuptools
+RUN python -m pip install --upgrade pip setuptools
+
+# Clone and install the package in editable mode
+RUN git clone https://github.com/opendilab/LightZero.git
+RUN pip install -e ./LightZero
+
+
+CMD ["python", "./LightZero/zoo/classic_control/cartpole/config/cartpole_muzero_config.py"]
+
+
+# build命令： docker build -t debian-py39-lz .

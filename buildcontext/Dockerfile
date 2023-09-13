@@ -1,32 +1,28 @@
-# Start from the latest Fedora base image
-FROM fedora:latest
+# Start from Ubuntu 20.04
+FROM ubuntu:20.04
 
-# Install necessary packages and clean up in one RUN to reduce image size
-RUN dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
-    && dnf -y update \
-    && dnf -y install git python3-virtualenv python3-pip python3-devel ffmpeg-libs SDL2-devel SDL2_image-devel SDL2_mixer-devel SDL2_ttf-devel portmidi-devel libavdevice libavc1394-devel zlibrary-devel ccache mesa-libGL mesa-libGL-devel libjpeg-devel \
-    && dnf clean all
+# Set the working directory
+WORKDIR /app
 
-# Print the Linux version for debugging purposes
-RUN uname -a
+# Install Python 3.8 and other dependencies
+RUN apt-get update && \
+    apt-get install -y python3.8 python3-pip gcc g++ swig git && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Clone the LightZero repository
-RUN git clone https://github.com/opendilab/LightZero
+# Create a symlink for Python
+RUN ln -s /usr/bin/python3.8 /usr/local/bin/python && \
+    ln -s /usr/bin/pip3 /usr/local/bin/pip
 
-# Switch to the LightZero directory
-WORKDIR "/LightZero"
+# Update pip and setuptools
+RUN python -m pip install --upgrade pip setuptools
 
-# Create a Python virtual environment named "fedora-lz"
-RUN python3 -m venv fedora-lz
+# Clone and install the package in editable mode
+RUN git clone https://github.com/opendilab/LightZero.git
+RUN pip install -e ./LightZero
 
-# Upgrade pip in the virtual environment to the latest version
-RUN /LightZero/fedora-lz/bin/pip install --upgrade pip
+# The command to run when this image starts up
+CMD ["python", "./LightZero/zoo/classic_control/cartpole/config/cartpole_muzero_config.py"]
 
-# Install DI-engine with common environment support
-RUN /LightZero/fedora-lz/bin/pip install DI-engine[common_env]==0.4.9 --default-timeout=1000 -i https://mirrors.aliyun.com/pypi/simple/
-
-# Install gym package. Please note to accept the rom license since some environments may require it.
-RUN /LightZero/fedora-lz/bin/pip install gym[accept-rom-license]==0.26.2
-
-# Install the LightZero package in editable mode
-RUN /LightZero/fedora-lz/bin/pip install -e .
+# docker build cmd:
+# docker build -t ubuntu-py38-lz .
