@@ -1,7 +1,7 @@
 from easydict import EasyDict
 
-env_name = 'MiniGrid-Empty-8x8-v0'
-# env_name = 'MiniGrid-FourRooms-v0'
+# env_name = 'MiniGrid-Empty-8x8-v0'
+env_name = 'MiniGrid-FourRooms-v0'
 # env_name = 'MiniGrid-DoorKey-8x8-v0'
 # env_name = 'MiniGrid-DoorKey-16x16-v0'
 # typical MiniGrid env id: {'MiniGrid-Empty-8x8-v0', 'MiniGrid-FourRooms-v0', 'MiniGrid-DoorKey-8x8-v0','MiniGrid-DoorKey-16x16-v0'},
@@ -24,19 +24,20 @@ elif env_name in ['MiniGrid-DoorKey-16x16-v0']:
 # begin of the most frequently changed config specified by the user
 # ==============================================================
 seed = 0
-collector_env_num = 8
-n_episode = 8
-evaluator_env_num = 3
-num_simulations = 50
-update_per_collect = 200
-batch_size = 256
 
-# collector_env_num = 1
-# n_episode = 1
-# evaluator_env_num = 1
-# num_simulations = 5
-# update_per_collect = 2
-# batch_size = 2
+# collector_env_num = 8
+# n_episode = 8
+# evaluator_env_num = 3
+# num_simulations = 50
+# update_per_collect = 200
+# batch_size = 256
+
+collector_env_num = 1
+n_episode = 1
+evaluator_env_num = 1
+num_simulations = 5
+update_per_collect = 2
+batch_size = 2
 
 reanalyze_ratio = 0
 random_collect_episode_num = 0

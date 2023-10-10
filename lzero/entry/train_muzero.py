@@ -8,15 +8,17 @@ from ding.config import compile_config
 from ding.envs import create_env_manager
 from ding.envs import get_vec_env_setting
 from ding.policy import create_policy
-from ding.utils import set_pkg_seed
+from ding.utils import set_pkg_seed, get_rank
 from ding.rl_utils import get_epsilon_greedy_fn
 from ding.worker import BaseLearner
 from tensorboardX import SummaryWriter
 
 from lzero.entry.utils import log_buffer_memory_usage, random_collect
 from lzero.policy import visit_count_temperature
+from lzero.policy.random_policy import LightZeroRandomPolicy
 from lzero.worker import MuZeroCollector as Collector
 from lzero.worker import MuZeroEvaluator as Evaluator
+from .utils import random_collect
 
 
 def train_muzero(
@@ -45,7 +47,7 @@ def train_muzero(
     """
 
     cfg, create_cfg = input_cfg
-    assert create_cfg.policy.type in ['efficientzero', 'muzero', 'muzero_recurrent', 'sampled_efficientzero', 'gumbel_muzero'], \
+    assert create_cfg.policy.type in ['efficientzero', 'muzero', 'muzero_recurrent', 'sampled_efficientzero', 'gumbel_muzero', 'stochastic_muzero'], \
         "train_muzero entry now only support the following algo.: 'efficientzero', 'muzero', 'sampled_efficientzero', 'gumbel_muzero'"
 
     if create_cfg.policy.type in ['muzero', 'muzero_recurrent']:
@@ -56,6 +58,8 @@ def train_muzero(
         from lzero.mcts import SampledEfficientZeroGameBuffer as GameBuffer
     elif create_cfg.policy.type == 'gumbel_muzero':
         from lzero.mcts import GumbelMuZeroGameBuffer as GameBuffer
+    elif create_cfg.policy.type == 'stochastic_muzero':
+        from lzero.mcts import StochasticMuZeroGameBuffer as GameBuffer
 
     if cfg.policy.cuda and torch.cuda.is_available():
         cfg.policy.device = 'cuda'
@@ -80,7 +84,7 @@ def train_muzero(
         policy.learn_mode.load_state_dict(torch.load(model_path, map_location=cfg.policy.device))
 
     # Create worker components: learner, collector, evaluator, replay buffer, commander.
-    tb_logger = SummaryWriter(os.path.join('./{}/log/'.format(cfg.exp_name), 'serial'))
+    tb_logger = SummaryWriter(os.path.join('./{}/log/'.format(cfg.exp_name), 'serial')) if get_rank() == 0 else None
     learner = BaseLearner(cfg.policy.learn.learner, policy.learn_mode, tb_logger, exp_name=cfg.exp_name)
 
     # ==============================================================
@@ -113,14 +117,15 @@ def train_muzero(
     # ==============================================================
     # Learner's before_run hook.
     learner.call_hook('before_run')
+    
     if cfg.policy.update_per_collect is not None:
         update_per_collect = cfg.policy.update_per_collect
 
-    # Accumulate plenty of data at the beginning of training.
+    # The purpose of collecting random data before training:
+    # Exploration: The collection of random data aids the agent in exploring the environment and prevents premature convergence to a suboptimal policy.
+    # Comparation: The agent's performance during random action-taking can be used as a reference point to evaluate the efficacy of reinforcement learning algorithms.
     if cfg.policy.random_collect_episode_num > 0:
-        random_collect(cfg.policy, policy, collector, collector_env, replay_buffer)
-        # reset the random_collect_episode_num to 0
-        cfg.policy.random_collect_episode_num = 0
+        random_collect(cfg.policy, policy, LightZeroRandomPolicy, collector, collector_env, replay_buffer)
 
     while True:
         log_buffer_memory_usage(learner.train_iter, replay_buffer, tb_logger)
@@ -136,12 +141,17 @@ def train_muzero(
         )
 
         if policy_config.eps.eps_greedy_exploration_in_collect:
-            epsilon_greedy_fn = get_epsilon_greedy_fn(start=policy_config.eps.start, end=policy_config.eps.end, decay=policy_config.eps.decay, type_=policy_config.eps.type)
+            epsilon_greedy_fn = get_epsilon_greedy_fn(
+                start=policy_config.eps.start,
+                end=policy_config.eps.end,
+                decay=policy_config.eps.decay,
+                type_=policy_config.eps.type
+            )
             collect_kwargs['epsilon'] = epsilon_greedy_fn(collector.envstep)
         else:
             collect_kwargs['epsilon'] = 0.0
 
-            # Evaluate policy performance.
+        # Evaluate policy performance.
         if evaluator.should_eval(learner.train_iter):
             stop, reward = evaluator.eval(learner.save_checkpoint, learner.train_iter, collector.envstep)
             if stop:

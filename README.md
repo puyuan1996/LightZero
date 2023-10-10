@@ -27,6 +27,8 @@
 [![Contributors](https://img.shields.io/github/contributors/opendilab/LightZero)](https://github.com/opendilab/LightZero/graphs/contributors)
 [![GitHub license](https://img.shields.io/github/license/opendilab/LightZero)](https://github.com/opendilab/LightZero/blob/master/LICENSE)
 
+Updated on 2023.09.21 LightZero-v0.0.2
+
 > LightZero is a lightweight, efficient, and easy-to-understand open-source algorithm toolkits that combines Monte Carlo Tree Search (MCTS) and Deep Reinforcement Learning (RL). 
 
 English | [简体中文](https://github.com/opendilab/LightZero/blob/main/README.zh.md)
@@ -108,41 +110,73 @@ For the file structure of LightZero, please refer to [lightzero_file_structure](
 LightZero is a library with a [PyTorch](https://pytorch.org/) implementation of MCTS algorithms (sometimes combined with cython and cpp), including:
 - [AlphaZero](https://www.science.org/doi/10.1126/science.aar6404)
 - [MuZero](https://arxiv.org/abs/1911.08265)
-- [EfficientZero](https://arxiv.org/abs/2111.00210)
 - [Sampled MuZero](https://arxiv.org/abs/2104.06303)
-
-[comment]: <> (- [Gumbel MuZero]&#40;https://openreview.net/pdf?id=bERaNdoegnO&#41;)
+- [Stochastic MuZero](https://openreview.net/pdf?id=X6D9bAHhBQ1)
+- [EfficientZero](https://arxiv.org/abs/2111.00210)
+- [Gumbel MuZero](https://openreview.net/pdf?id=bERaNdoegnO&)
 
 The environments and algorithms currently supported by LightZero are shown in the table below:
 
-| Env./Alg.      | AlphaZero | MuZero | EfficientZero | Sampled EfficientZero |
-| ------------- | --------- | ------ | ------------- | --------------------- |
-| Atari         | ---       | ✔    | ✔           | ✔                   |
-| tictactoe     | ✔       | ✔    | 🔒          | 🔒                  |
-| gomoku        | ✔       | ✔    | 🔒          | 🔒                  |
-| chess         | 🔒       | 🔒   | 🔒          | 🔒                  |
-| go            | 🔒       | 🔒   | 🔒          | 🔒                  |
-| lunarlander | ---       | ✔    | ✔           | ✔                   |
-| bipedalwalker   | ---       | ✔    | ✔           | ✔                   |
-| cartpole     | ---       | ✔    | ✔           | ✔                   |
-| pendulum      | ---       | ✔    | ✔           | ✔                   |
+| Env./Algo.    | AlphaZero | MuZero | EfficientZero | Sampled EfficientZero | Gumbel MuZero | Stochastic MuZero | 
+|---------------| --------- | ------ |-------------| ------------------ | ---------- |----------------|
+| TicTacToe     | ✔       | ✔      | 🔒           | 🔒                | ✔          | 🔒             |
+| Gomoku        | ✔       | ✔      | 🔒          | 🔒               | ✔          | 🔒             |
+| Connect4      | ✔       | ✔      | 🔒          | 🔒               | 🔒           | 🔒             |
+| 2048          | ✔       | ✔      | 🔒            | 🔒                | 🔒           | ✔              |
+| Chess         | 🔒       | 🔒     | 🔒          | 🔒               | 🔒         | 🔒             |
+| Go            | 🔒       | 🔒     | 🔒          | 🔒               | 🔒         | 🔒             |
+| CartPole      | ---       | ✔      | ✔           | ✔                | ✔          | ✔              |
+| Pendulum      | ---       | ✔      | ✔           | ✔                | ✔          | 🔒             |
+| LunarLander   | ---       | ✔      | ✔           | ✔                | ✔          | ✔              |
+| BipedalWalker | ---       | ✔      | ✔           | ✔                | ✔          | 🔒              |
+| Atari         | ---       | ✔      | ✔           | ✔                | ✔          | ✔              |
+| MuJoCo        | ---       | ✔     | ✔          | ✔                | 🔒         | 🔒               |
+| MiniGrid      | ---       | 🔒     | 🔒          | 🔒               | 🔒         | 🔒             |
 
 <sup>(1): "✔" means that the corresponding item is finished and well-tested.</sup>
 
-<sup>(2): "🔒" means that the corresponding item is in the waitinglist (Work In Progress).</sup>
+<sup>(2): "🔒" means that the corresponding item is in the waiting-list (Work In Progress).</sup>
 
 <sup>(3): "---" means that this algorithm doesn't support this environment.</sup>
 
 
 ## Installation
 
-You can install latest LightZero in development from the GitHub source codes with the following command:
+You can install the latest LightZero in development from the GitHub source codes with the following command:
 
 ```bash
 git clone https://github.com/opendilab/LightZero.git
 cd LightZero
 pip3 install -e .
 ```
+
+Kindly note that LightZero currently supports compilation only on `Linux` and `macOS` platforms.
+We are actively working towards extending this support to the `Windows` platform. 
+Your patience during this transition is greatly appreciated.
+
+## Installation with Docker
+
+We also provide a Dockerfile that sets up an environment with all dependencies needed to run the LightZero library. This Docker image is based on Ubuntu 20.04 and installs Python 3.8, along with other necessary tools and libraries.
+Here's how to use our Dockerfile to build a Docker image, run a container from this image, and execute LightZero code inside the container.
+1. **Download the Dockerfile**: The Dockerfile is located in the root directory of the LightZero repository. Download this [file](https://github.com/opendilab/LightZero/blob/main/Dockerfile) to your local machine.
+2. **Prepare the build context**: Create a new empty directory on your local machine, move the Dockerfile into this directory, and navigate into this directory. This step helps to avoid sending unnecessary files to the Docker daemon during the build process.
+    ```bash
+    mkdir lightzero-docker
+    mv Dockerfile lightzero-docker/
+    cd lightzero-docker/
+    ```
+3. **Build the Docker image**: Use the following command to build the Docker image. This command should be run from inside the directory that contains the Dockerfile.
+    ```bash
+    docker build -t ubuntu-py38-lz:latest -f ./Dockerfile .
+    ```
+4. **Run a container from the image**: Use the following command to start a container from the image in interactive mode with a Bash shell.
+    ```bash
+    docker run -dit --rm ubuntu-py38-lz:latest /bin/bash
+    ```
+5. **Execute LightZero code inside the container**: Once you're inside the container, you can run the example Python script with the following command:
+    ```bash
+    python ./LightZero/zoo/classic_control/cartpole/config/cartpole_muzero_config.py
+    ```
 
 [comment]: <> (- [AlphaGo Zero]&#40;https://www.nature.com/articles/nature24270&#41; )
 
@@ -173,30 +207,53 @@ python3 -u zoo/board_games/tictactoe/config/tictactoe_muzero_bot_mode_config.py
 
 <details open><summary>Click to collapse</summary>
 
-Below are the benchmark results of [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py), [MuZero w/ SSL](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) , [EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/efficientzero.py) and [Sampled EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/sampled_efficientzero.py) on three discrete action space games in [Atari](https://github.com/opendilab/LightZero/blob/main/zoo/atari/envs/atari_lightzero_env.py).
-
+- Below are the benchmark results of [AlphaZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/alphazero.py) and [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) on two board games: [TicTacToe](https://github.com/opendilab/LightZero/blob/main/zoo/board_games/tictactoe/envs/tictactoe_env.py), [Gomoku](https://github.com/opendilab/LightZero/blob/main/zoo/board_games/gomoku/envs/gomoku_env.py).
 <p align="center">
-  <img src="assets/benchmark/main/pong_main.png" alt="Image Description 1" width="23%" height="auto" style="margin: 0 1%;">
-  <img src="assets/benchmark/main/qbert_main.png" alt="Image Description 2" width="23%" height="auto" style="margin: 0 1%;">
-  <img src="assets/benchmark/main/mspacman_main.png" alt="Image Description 3" width="23%" height="auto" style="margin: 0 1%;">
-  <img src="assets/benchmark/ablation/mspacman_sez_K.png" alt="Image Description 4" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/tictactoe_bot-mode_main.png" alt="tictactoe_bot-mode_main" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/gomoku_bot-mode_main.png" alt="gomoku_bot-mode_main" width="30%" height="auto" style="margin: 0 1%;">
+</p>
+
+- Below are the benchmark results of [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py), [MuZero w/ SSL](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) , [EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/efficientzero.py) and [Sampled EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/sampled_efficientzero.py) on three discrete action space games in [Atari](https://github.com/opendilab/LightZero/blob/main/zoo/atari/envs/atari_lightzero_env.py).
+<p align="center">
+  <img src="assets/benchmark/main/pong_main.png" alt="pong_main" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/qbert_main.png" alt="qbert_main" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/mspacman_main.png" alt="mspacman_main" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/mspacman_sez_K.png" alt="mspacman_sez_K" width="23%" height="auto" style="margin: 0 1%;">
 </p>
 
 
-Below are the benchmark results of [Sampled EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/sampled_efficientzero.py) with ``Factored/Gaussian`` policy representation on three continuous action space games: [Pendulum-v1](https://github.com/opendilab/LightZero/blob/main/zoo/classic_control/pendulum/envs/pendulum_lightzero_env.py), [LunarLanderContinuous-v2](https://github.com/opendilab/LightZero/blob/main/zoo/box2d/lunarlander/envs/lunarlander_env.py), [BipedalWalker-v3](https://github.com/opendilab/LightZero/blob/main/zoo/box2d/bipedalwalker/envs/bipedalwalker_env.py).
-> Where ``Factored Policy`` indicates that the agent learns a policy network that outputs a categorical distribution, the dimensions of the action space for the three environments are 11, 49 (7^2), and 256 (4^4), respectively, after manual discretization. On the other hand, ``Gaussian Policy`` indicates that the agent learns a policy network that outputs parameters (mu and sigma) for a Gaussian distribution.
+- Below are the benchmark results of [Sampled EfficientZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/sampled_efficientzero.py) with ``Factored/Gaussian`` policy representation on three classic continuous action space games: [Pendulum-v1](https://github.com/opendilab/LightZero/blob/main/zoo/classic_control/pendulum/envs/pendulum_lightzero_env.py), [LunarLanderContinuous-v2](https://github.com/opendilab/LightZero/blob/main/zoo/box2d/lunarlander/envs/lunarlander_env.py), [BipedalWalker-v3](https://github.com/opendilab/LightZero/blob/main/zoo/box2d/bipedalwalker/envs/bipedalwalker_env.py)
+and two MuJoCo continuous action space games: [Hopper-v3](https://github.com/opendilab/LightZero/blob/main/zoo/mujoco/envs/mujoco_lightzero_env.py), [Walker2d-v3](https://github.com/opendilab/LightZero/blob/main/zoo/mujoco/envs/mujoco_lightzero_env.py).
+> "Factored Policy" indicates that the agent learns a policy network that outputs a categorical distribution. After manual discretization, the dimensions of the action space for the five environments are 11, 49 (7^2), 256 (4^4), 64 (4^3), and 4096 (4^6), respectively. On the other hand, "Gaussian Policy" refers to the agent learning a policy network that directly outputs parameters (mu and sigma) for a Gaussian distribution.
 <p align="center">
-  <img src="assets/benchmark/main/pendulum_main.png" alt="Image Description 1" width="23%" height="auto" style="margin: 0 1%;">
-  <img src="assets/benchmark/ablation/pendulum_sez_K.png" alt="Image Description 2" width="23%" height="auto" style="margin: 0 1%;">
-  <img src="assets/benchmark/main/lunarlander_main.png" alt="Image Description 3" width="23%" height="auto" style="margin: 0 1%;">
-  <img src="assets/benchmark/main/bipedalwalker_main.png" alt="Image Description 3" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/pendulum_main.png" alt="pendulum_main" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/pendulum_sez_K.png" alt="pendulum_sez_K" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/lunarlander_main.png" alt="lunarlander_main" width="30%" height="auto" style="margin: 0 1%;">
+</p>
+<p align="center">
+  <img src="assets/benchmark/main/bipedalwalker_main.png" alt="bipedalwalker_main" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/hopper_main.png" alt="hopper_main" width="31.5%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/walker2d_main.png" alt="walker2d_main" width="31.5%" height="auto" style="margin: 0 1%;">
 </p>
 
-Below are the benchmark results of [AlphaZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/alphazero.py) and [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) on two board_games: [TicTacToe](https://github.com/opendilab/LightZero/blob/main/zoo/board_games/tictactoe/envs/tictactoe_env.py), [Gomoku](https://github.com/opendilab/LightZero/blob/main/zoo/board_games/gomoku/envs/gomoku_env.py).
-
+- Below are the benchmark results of [GumbelMuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/gumbel_muzero.py) and [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) (under different simulation cost) on four environments: [PongNoFrameskip-v4](https://github.com/opendilab/LightZero/blob/main/zoo/atari/envs/atari_lightzero_env.py), [MsPacmanNoFrameskip-v4]((https://github.com/opendilab/LightZero/blob/main/zoo/atari/envs/atari_lightzero_env.py)), [Gomoku](https://github.com/opendilab/LightZero/blob/main/zoo/board_games/gomoku/envs/gomoku_env.py), and [LunarLanderContinuous-v2](https://github.com/opendilab/LightZero/blob/main/zoo/box2d/lunarlander/envs/lunarlander_env.py).
 <p align="center">
-  <img src="assets/benchmark/main/tictactoe_bot-mode_main.png" alt="Image Description 1" width="45%" height="auto" style="margin: 0 1%;">
-  <img src="assets/benchmark/main/gomoku_bot-mode_main.png" alt="Image Description 2" width="45%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/pong_gmz_ns.png" alt="pong_gmz_ns" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/mspacman_gmz_ns.png" alt="mspacman_gmz_ns" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/gomoku_bot-mode_gmz_ns.png" alt="gomoku_bot-mode_gmz_ns" width="23%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/ablation/lunarlander_gmz_ns.png" alt="lunarlander_gmz_ns" width="23%" height="auto" style="margin: 0 1%;">
+</p>
+
+- Below are the benchmark results of [StochasticMuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/stochastic_muzero.py) and [MuZero](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) on [2048 environment](https://github.com/opendilab/LightZero/blob/main/zoo/game_2048/envs/game_2048_env.py) with varying levels of chance (num_chances=2 and 5).
+<p align="center">
+  <img src="assets/benchmark/main/2048/2048_stochasticmz_mz.png" alt="2048_stochasticmz_mz" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/2048/2048_stochasticmz_mz_nc5.png" alt="mspacman_gmz_ns" width="30%" height="auto" style="margin: 0 1%;">
+</p>
+
+- Below are the benchmark results of various MCTS exploration mechanisms of [MuZero w/ SSL](https://github.com/opendilab/LightZero/blob/main/lzero/policy/muzero.py) in the [MiniGrid environment](https://github.com/opendilab/LightZero/blob/main/zoo/minigrid/envs/minigrid_lightzero_env.py).
+<p align="center">
+  <img src="assets/benchmark/main/minigrid/keycorridors3r3_exploration.png" alt="keycorridors3r3_exploration" width="30%" height="auto" style="margin: 0 1%;">
+  <img src="assets/benchmark/main/minigrid/fourrooms_exploration.png" alt="fourrooms_exploration" width="30%" height="auto" style="margin: 0 1%;">
 </p>
 
 </details>
@@ -214,6 +271,8 @@ The following are the detailed paper notes (in Chinese) of the above algorithms:
 - [MuZero](https://github.com/opendilab/LightZero/blob/main/assets/paper_notes/MuZero.pdf)
 - [EfficientZero](https://github.com/opendilab/LightZero/blob/main/assets/paper_notes/EfficientZero.pdf)
 - [SampledMuZero](https://github.com/opendilab/LightZero/blob/main/assets/paper_notes/SampledMuZero.pdf)
+- [GumbelMuZero](https://github.com/opendilab/LightZero/blob/main/assets/paper_notes/GumbelMuZero.pdf)
+- [StochasticMuZero](https://github.com/opendilab/LightZero/blob/main/assets/paper_notes/StochasticMuZero.pdf)
 - [NotationTable](https://github.com/opendilab/LightZero/blob/main/assets/paper_notes/SymbolTable.pdf)
 
 </details>
@@ -224,17 +283,12 @@ The following are the overview MCTS principle diagrams of the above algorithms:
 
 <details><summary>Click to expand</summary>
 
-![mcts](assets/algo_overview/mcts.png)
-
-![alphazero](assets/algo_overview/alphazero.png)
-
-![muzero](assets/algo_overview/muzero.png)
-
-![efficientzero](assets/algo_overview/efficientzero.png)
-
-![sampled muzero](assets/algo_overview/sampled_muzero.png)
-
-![gumbel muzero](assets/algo_overview/gumbel_muzero.png)
+- [MCTS](https://github.com/opendilab/LightZero/blob/main/assets/algo_overview/mcts_overview.pdf)
+- [AlphaZero](https://github.com/opendilab/LightZero/blob/main/assets/algo_overview/alphazero_overview.pdf)
+- [MuZero](https://github.com/opendilab/LightZero/blob/main/assets/algo_overview/muzero_overview.pdf)
+- [EfficientZero](https://github.com/opendilab/LightZero/blob/main/assets/algo_overview/efficientzero_overview.pdf)
+- [SampledMuZero](https://github.com/opendilab/LightZero/blob/main/assets/algo_overview/sampled_muzero_overview.pdf)
+- [GumbelMuZero](https://github.com/opendilab/LightZero/blob/main/assets/algo_overview/gumbel_muzero_overview.pdf)
 
 </details>
 
@@ -419,9 +473,10 @@ This repo is partially based on the following repo, many thanks to their pioneer
 - https://github.com/opendilab/DI-engine
 - https://github.com/YeWR/EfficientZero
 - https://github.com/werner-duvaud/muzero-general
+- https://github.com/deepmind/mctx
 
 Special thanks to [@PaParaZz1](https://github.com/PaParaZz1), [@karroyan](https://github.com/karroyan), [@nighood](https://github.com/nighood), 
-[@jayyoung0802](https://github.com/jayyoung0802), [@timothijoe](https://github.com/timothijoe), [@TuTuHuss](https://github.com/TuTuHuss), [@puyuan1996](https://github.com/puyuan1996), [@HansBug](https://github.com/HansBug) for their contributions and support.
+[@jayyoung0802](https://github.com/jayyoung0802), [@timothijoe](https://github.com/timothijoe), [@TuTuHuss](https://github.com/TuTuHuss), [@HarryXuancy](https://github.com/HarryXuancy), [@puyuan1996](https://github.com/puyuan1996), [@HansBug](https://github.com/HansBug) for their contributions and support.
 
 
 ## License
