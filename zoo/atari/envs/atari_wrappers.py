@@ -109,7 +109,7 @@ def wrap_lightzero(config, episode_life, clip_rewards):
             env,
             video_folder=config.save_path,
             episode_trigger=lambda episode_id: True,
-            name_prefix='rl-video-{}'.format(''.join(random.choice(string.ascii_lowercase) for i in range(5))),
+            name_prefix='rl-video-{}'.format(''.join(random.choice(string.ascii_lowercase) for _ in range(5))),
         )
 
     env = JpegWrapper(env, transform2string=config.transform2string)

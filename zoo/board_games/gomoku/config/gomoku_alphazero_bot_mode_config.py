@@ -4,8 +4,11 @@ from easydict import EasyDict
 # begin of the most frequently changed config specified by the user
 # ==============================================================
 board_size = 6  # default_size is 15
-collector_env_num = 32
-n_episode = 32
+# collector_env_num = 32
+# n_episode = 32
+# evaluator_env_num = 5
+collector_env_num = 8
+n_episode = 8
 evaluator_env_num = 5
 num_simulations = 50
 update_per_collect = 50
