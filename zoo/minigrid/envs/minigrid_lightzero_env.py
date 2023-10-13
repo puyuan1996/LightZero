@@ -25,6 +25,9 @@ class MiniGridEnv(BaseEnv):
         env_name='MiniGrid-Empty-8x8-v0',
         flat_obs=True,
         max_step=300,
+        save_replay=True,
+        # save_replay=False,
+
     )
 
     @classmethod
@@ -38,7 +41,7 @@ class MiniGridEnv(BaseEnv):
         self._init_flag = False
         self._env_name = cfg.env_name
         self._flat_obs = cfg.flat_obs
-        self._save_replay = False
+        self._save_replay = cfg.save_replay
         self._max_step = cfg.max_step
 
     def reset(self) -> np.ndarray:
@@ -90,6 +93,10 @@ class MiniGridEnv(BaseEnv):
         self._current_step = 0
         if self._save_replay:
             self._frames = []
+            self._replay_path = './video'
+            self._save_replay_count = 0
+            if not os.path.exists(self._replay_path):
+                os.mkdir(self._replay_path)
 
         action_mask = np.ones(self.action_space.n, 'int8')
         obs = {'observation': obs, 'action_mask': action_mask, 'to_play': -1}
@@ -114,6 +121,9 @@ class MiniGridEnv(BaseEnv):
         # using the step method of Gymnasium env, return is (observation, reward, terminated, truncated, info)
         obs, rew, done, _, info = self._env.step(action)
         rew = float(rew)
+        # print(rew)
+        if rew < 0:
+            print('reward < 0')
         self._eval_episode_return += rew
         self._current_step += 1
         if self._current_step >= self._max_step:

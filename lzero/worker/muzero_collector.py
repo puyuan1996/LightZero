@@ -565,6 +565,8 @@ class MuZeroCollector(ISerialCollector):
                 if timestep.done:
                     self._total_episode_count += 1
                     reward = timestep.info['eval_episode_return']
+                    if reward < 0:
+                        print('reward < 0')
                     info = {
                         'reward': reward,
                         'time': self._env_info[env_id]['time'],

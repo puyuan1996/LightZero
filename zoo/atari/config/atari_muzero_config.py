@@ -73,7 +73,7 @@ atari_muzero_config = dict(
         # lr_piecewise_constant_decay=True,
         # learning_rate=0.2,
 
-        optim_type='AdamW',
+        optim_type='Adam',
         lr_piecewise_constant_decay=False,
         learning_rate=0.003,
         grad_clip_value=0.5,

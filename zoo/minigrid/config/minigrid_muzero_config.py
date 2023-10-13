@@ -1,7 +1,7 @@
 from easydict import EasyDict
 
-# env_name = 'MiniGrid-Empty-8x8-v0'
-env_name = 'MiniGrid-FourRooms-v0'
+env_name = 'MiniGrid-Empty-8x8-v0'
+# env_name = 'MiniGrid-FourRooms-v0'
 # env_name = 'MiniGrid-DoorKey-8x8-v0'
 # env_name = 'MiniGrid-DoorKey-16x16-v0'
 # typical MiniGrid env id: {'MiniGrid-Empty-8x8-v0', 'MiniGrid-FourRooms-v0', 'MiniGrid-DoorKey-8x8-v0','MiniGrid-DoorKey-16x16-v0'},
@@ -35,8 +35,8 @@ seed = 0
 collector_env_num = 1
 n_episode = 1
 evaluator_env_num = 1
-num_simulations = 5
-update_per_collect = 2
+num_simulations = 1
+update_per_collect = 1
 batch_size = 2
 
 reanalyze_ratio = 0
@@ -104,7 +104,7 @@ minigrid_muzero_config = dict(
         game_segment_length=50,
         update_per_collect=update_per_collect,
         batch_size=batch_size,
-        optim_type='AdamW',
+        optim_type='Adam',
         lr_piecewise_constant_decay=False,
         learning_rate=0.003,
         ssl_loss_weight=2,  # NOTE: default is 0.

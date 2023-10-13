@@ -136,8 +136,7 @@ def train_muzero(
             policy_config.manual_temperature_decay,
             policy_config.fixed_temperature_value,
             policy_config.threshold_training_steps_for_final_temperature,
-            trained_steps=learner.train_iter,
-            init_temperature_value_for_decay=policy_config.init_temperature_value_for_decay,
+            trained_steps=learner.train_iter
         )
 
         if policy_config.eps.eps_greedy_exploration_in_collect:
