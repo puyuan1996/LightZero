@@ -1,7 +1,7 @@
 from easydict import EasyDict
 
 # options={'PongNoFrameskip-v4', 'QbertNoFrameskip-v4', 'MsPacmanNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4', 'BreakoutNoFrameskip-v4', ...}
-env_name = 'PongNoFrameskip-v4'
+env_name = 'BreakoutNoFrameskip-v4'
 
 if env_name == 'PongNoFrameskip-v4':
     action_space_size = 6
@@ -17,11 +17,16 @@ elif env_name == 'BreakoutNoFrameskip-v4':
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-collector_env_num = 8
-n_episode = 8
+# collector_env_num = 8
+# n_episode = 8
+# evaluator_env_num = 3
+seed = 0
+collector_env_num = 1
+n_episode = 1
 evaluator_env_num = 3
 num_simulations = 50
-update_per_collect = 1000
+# update_per_collect = 1000
+update_per_collect = None
 batch_size = 256
 max_env_step = int(1e6)
 reanalyze_ratio = 0.
@@ -33,7 +38,7 @@ eps_greedy_exploration_in_collect = False
 
 atari_efficientzero_config = dict(
     exp_name=
-    f'data_ez_ctree/{env_name[:-14]}_efficientzero_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_seed0',
+    f'data_ez_ctree/{env_name[:-14]}_efficientzero_ns{num_simulations}_upc{update_per_collect}-mur2-fl2e5_rr{reanalyze_ratio}_cmes5e3_emes2e4_cen1_seed{seed}',
     env=dict(
         env_name=env_name,
         obs_shape=(4, 96, 96),
@@ -41,8 +46,12 @@ atari_efficientzero_config = dict(
         evaluator_env_num=evaluator_env_num,
         n_evaluator_episode=evaluator_env_num,
         manager=dict(shared_memory=False, ),
+        collect_max_episode_steps=int(5e3),
+        eval_max_episode_steps=int(2e4),
     ),
     policy=dict(
+        model_update_ratio=2,
+        threshold_training_steps_for_final_lr=int(2e5),
         model=dict(
             observation_shape=(4, 96, 96),
             frame_stack_num=4,
@@ -97,4 +106,4 @@ create_config = atari_efficientzero_create_config
 
 if __name__ == "__main__":
     from lzero.entry import train_muzero
-    train_muzero([main_config, create_config], seed=0, max_env_step=max_env_step)
+    train_muzero([main_config, create_config], seed=seed, max_env_step=max_env_step)
