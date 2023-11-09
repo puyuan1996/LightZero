@@ -1,7 +1,8 @@
-from typing import Tuple
+from typing import Tuple, Any
 
 import numpy as np
 import torch
+from torch import Tensor
 
 
 class Cache:
@@ -102,5 +103,5 @@ class AssignWithoutInplaceCheck(torch.autograd.Function):
         return input
 
     @staticmethod
-    def backward(ctx, grad_out: torch.Tensor) -> Tuple[torch.Tensor]:
+    def backward(ctx, grad_out: torch.Tensor) -> Tuple[Tensor, Any, None, None, None]:
         return grad_out, grad_out[AssignWithoutInplaceCheck.get_slice(ctx.dim, ctx.start, ctx.stop)], None, None, None

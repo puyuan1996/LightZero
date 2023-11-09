@@ -1,28 +1,23 @@
 import copy
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Tuple
+from typing import List, Optional
 
-from einops import rearrange
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
+from PIL import Image
+from einops import rearrange
+from torch.distributions.categorical import Categorical
 
 from .kv_caching import KeysValues
 from .slicer import Embedder, Head
 from .tokenizer import Tokenizer
 from .transformer import Transformer, TransformerConfig
 from .utils import init_weights, LossWithIntermediateLosses
-import random
-from typing import List, Optional, Union
-
-import gym
-from einops import rearrange
-import numpy as np
-from PIL import Image
-import torch
-from torch.distributions.categorical import Categorical
-import torchvision
-
+from joblib import hash
 
 @dataclass
 class WorldModelOutput:
@@ -273,38 +268,24 @@ class WorldModel(nn.Module):
         return outputs_wm.output_sequence, outputs_wm.logits_observations, outputs_wm.logits_rewards, outputs_wm.logits_policy, outputs_wm.logits_value
 
     def forward_recurrent_inference(self, state_action_history, should_predict_next_obs: bool = True):
+        # 已知 state_action_history[0] 是 (root_latent_state, root_action) 并且state_action_history[-1]是最后一步的latent state和action
+        # 而且中间可能有很多个(root_latent_state, *） 由于transformer在计算时应该都是从(root_latent_state, *）开始 unroll的，因此我希望
+        # 找到这样的一个(root_latent_state, *）的最后一个位置，然后从这个位置找到其在 past_keys_values_cache 中的对应的 value，然后从这个 value开始
+        # 进行unroll，这样就可以保证在进行推断时，不会出现重复计算的情况。
 
-        # 已知state_action_history[0] 是 (root_latent_state, last_actions) 并且state_action_history[-1]是最后一步的latent state和action
-        # 而且中间可能有很多个(root_latent_state, *） 由于transformer在计算时应该都是从(root_latent_state, root_action）开始 unroll的，因此我希望
-        # 找到这样的一个(root_latent_state, root_action）的最后一个位置，然后从这个位置找到其在keys_values_cache中的对应的value，然后从这个value开始
-        # 进行unroll，这样就可以保证在进行推断时，不会出现重复计算的情况
-
-        # 你好，你的实现好像有个bug，就是我们只需要找到最后一个root_latent_state的位置，然后从这个位置开始的action_history就可以了，不需要找到
-        # 最后一个root_action的位置，因为这个位置可能是不对的，因为在root_state可能有多个不同的action
-
-        # 找到 action_history 中最后一个 root_latent_state, root_action 的位置
-        # root_latent_state, root_action = state_action_history[0]
-        # last_root_position = max(i for i, (latent_state, action) in enumerate(state_action_history) if
-        #                  np.array_equal(latent_state, root_latent_state) and
-        #                  (torch.equal(action, root_action) if isinstance(action, torch.Tensor) else action == root_action))
-
-        # 找到 action_history 中最后一个 root_latent_state 的位置
+        # 找到 state_action_history 中最后一个 (root_latent_state, *) 的位置
         root_latent_state, _ = state_action_history[0]
         last_root_position = max(
             i for i, (latent_state, _) in enumerate(state_action_history) if np.array_equal(latent_state, root_latent_state))
 
         # 从这个位置开始的 action_history
         action_history_from_last_root = state_action_history[last_root_position:]
-        cache_key = tuple(action_history_from_last_root)
 
-        from joblib import hash
         cache_key = hash(action_history_from_last_root)
-
         if cache_key in self.past_keys_values_cache:
+            # 如果找到对应的缓存，那么直接使用缓存
             self.keys_values_wm = self.past_keys_values_cache[cache_key]
-        else:
-            pass
-            # 如果没有找到对应的缓存，那么进行正常的计算
+        # 如果没有找到对应的缓存，那么进行正常的计算
 
         assert self.keys_values_wm is not None and self.num_observations_tokens is not None
 
@@ -315,7 +296,7 @@ class WorldModel(nn.Module):
         if self.keys_values_wm.size + num_passes > self.config.max_tokens:
             _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
 
-        # TODO
+        # 提取出最后一个action
         action = state_action_history[-1][-1]
 
         token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
@@ -344,7 +325,7 @@ class WorldModel(nn.Module):
         obs = self.decode_obs_tokens() if should_predict_next_obs else None
         # return outputs_wm.output_sequence, outputs_wm.logits_observations, outputs_wm.logits_rewards, outputs_wm.logits_policy, outputs_wm.logits_value
 
-        # TODO: 在计算结束后，更新缓存
+        # 在计算结束后，更新缓存，注意需要深拷贝
         self.past_keys_values_cache[cache_key] = copy.deepcopy(self.keys_values_wm)
 
         return outputs_wm.output_sequence, self.obs_tokens, reward, outputs_wm.logits_policy, outputs_wm.logits_value
@@ -356,10 +337,10 @@ class WorldModel(nn.Module):
 
         output_sequence, obs_tokens = [], []
 
-        # if self.keys_values_wm.size + num_passes > self.config.max_tokens:
-        #     _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
-        # TODO: reset
-        _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
+        if self.keys_values_wm.size + num_passes > self.config.max_tokens:
+            _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
+        # TODO: test reset
+        # _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
 
         token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
         token = token.reshape(-1, 1).to(self.device)  # (B, 1)
