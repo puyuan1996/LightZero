@@ -41,6 +41,7 @@ main_config = dict(
         manager=dict(shared_memory=False, ),
     ),
     policy=dict(
+        # mcts_ctree=False,
         multi_agent=multi_agent,
         ignore_done=False,
         model=dict(
@@ -59,7 +60,7 @@ main_config = dict(
             norm_type='BN',
         ),
         cuda=True,
-        mcts_ctree=True,
+        # mcts_ctree=True,
         gumbel_algo=False,
         env_type='not_board_games',
         game_segment_length=30,
@@ -77,7 +78,7 @@ main_config = dict(
         optim_type='Adam',
         lr_piecewise_constant_decay=False,
         learning_rate=0.003,
-        ssl_loss_weight=2,  # NOTE: default is 0.
+        ssl_loss_weight=0,  # NOTE: default is 0.
         num_simulations=num_simulations,
         reanalyze_ratio=reanalyze_ratio,
         n_episode=n_episode,

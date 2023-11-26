@@ -536,6 +536,7 @@ class MuZeroPolicy(Policy):
             global_latent_state_roots = global_latent_state_roots.detach().cpu().numpy()
             # policy_logits_tmp = policy_logits.reshape(active_collect_env_num, self.cfg.model.agent_num, -1)
             policy_logits = policy_logits.detach().cpu().numpy().tolist()
+            #  reward_roots list 24
             reward_roots = [[reward_root]*self.cfg.model.agent_num for reward_root in reward_roots]
             reward_roots = sum(reward_roots, [])
             # # joint policy_logits
@@ -559,6 +560,8 @@ class MuZeroPolicy(Policy):
             else:
                 # python mcts_tree
                 roots = MCTSPtree.roots(batch_size, legal_actions)
+            # policy_logits list 24 not-softmax
+            # reward_roots list 72
             roots.prepare(self._cfg.root_noise_weight, noises, reward_roots, policy_logits, to_play)
             self._mcts_collect.search(roots, self._collect_model, (agent_latent_state_roots, global_latent_state_roots), to_play)
 
