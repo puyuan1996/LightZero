@@ -1,14 +1,45 @@
 from easydict import EasyDict
-
+import torch
+# torch.cuda.set_device(1)
+# torch.cuda.empty_cache()
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-collector_env_num = 8
-n_episode = 8
-evaluator_env_num = 3
-num_simulations = 25
-update_per_collect = 100
-batch_size = 256
+
+# collector_env_num = 8
+# n_episode = 8
+# evaluator_env_num = 1
+# num_simulations = 25
+# model_update_ratio = 1
+# update_per_collect = 200
+# # batch_size = 256
+# batch_size = 64
+# max_env_step = int(1e5)
+# reanalyze_ratio = 0
+# num_unroll_steps = 20
+
+
+# collector_env_num = 1
+# n_episode = 1
+# evaluator_env_num = 1
+# num_simulations = 25
+# # num_simulations = 5  # debug
+# update_per_collect = 20
+# model_update_ratio = 1
+# batch_size = 32
+# max_env_step = int(1e5)
+# reanalyze_ratio = 0
+# num_unroll_steps = 20
+# # num_unroll_steps = 5 # debug
+
+# debug
+collector_env_num = 2
+n_episode = 2
+evaluator_env_num = 2
+num_simulations = 25 
+update_per_collect = 2
+model_update_ratio = 1
+batch_size = 2
 max_env_step = int(1e5)
 reanalyze_ratio = 0
 num_unroll_steps = 20
@@ -24,14 +55,12 @@ num_unroll_steps = 20
 # reanalyze_ratio = 0
 # num_unroll_steps = 5
 
-
-
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
 cartpole_muzero_gpt_config = dict(
-    exp_name=f'data_mz_ctree/cartpole_muzero_gpt_ns{num_simulations}_upc{update_per_collect}_rr{reanalyze_ratio}_H{num_unroll_steps}_emb128_nlayers2_ssize21_initzero_multistep_seed0',
+    exp_name=f'data_mz_gpt_ctree_1128/cartpole_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_nlayers2_emd128_mediumnet_bs{batch_size}_mcs25_fixedtokenizer_fixinitlatent_seed0',
     env=dict(
         env_name='CartPole-v0',
         continuous=False,
@@ -52,14 +81,19 @@ cartpole_muzero_gpt_config = dict(
             self_supervised_learning_loss=True,  # NOTE: default is False.
             discrete_action_encoding_type='one_hot',
             norm_type='BN',
+            # reward_support_size=601,
+            # value_support_size=601,
+            # support_scale=300,
             reward_support_size=21,
             value_support_size=21,
             support_scale=10,
         ),
         cuda=True,
+        # cuda=False,
         env_type='not_board_games',
         game_segment_length=50,
         update_per_collect=update_per_collect,
+        model_update_ratio=model_update_ratio,
         batch_size=batch_size,
         optim_type='Adam',
         lr_piecewise_constant_decay=False,
@@ -96,3 +130,10 @@ create_config = cartpole_muzero_gpt_create_config
 if __name__ == "__main__":
     from lzero.entry import train_muzero_gpt
     train_muzero_gpt([main_config, create_config], seed=0, max_env_step=max_env_step)
+
+    # 下面为cprofile的代码
+    # from lzero.entry import train_muzero_gpt
+    # def run(max_env_step: int):
+    #     train_muzero_gpt([main_config, create_config], seed=0, max_env_step=max_env_step)
+    # import cProfile
+    # cProfile.run(f"run({10000})", filename="cartpole_muzero_gpt_ctree_cprofile_10k_envstep", sort="cumulative")

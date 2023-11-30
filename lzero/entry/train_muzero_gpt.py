@@ -186,6 +186,10 @@ def train_muzero_gpt(
 
             if cfg.policy.use_priority:
                 replay_buffer.update_priority(train_data, log_vars[0]['value_priority_orig'])
+        
+        # TODO
+        # policy._learn_model.world_model.past_keys_values_cache.clear()
+        # torch.cuda.empty_cache()
 
         if collector.envstep >= max_env_step or learner.train_iter >= max_train_iter:
             break
