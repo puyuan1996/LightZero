@@ -40,6 +40,7 @@ lunarlander_gumbel_muzero_config = dict(
         ),
         cuda=True,
         env_type='not_board_games',
+        action_type='varied_action_space',
         game_segment_length=200,
         update_per_collect=update_per_collect,
         batch_size=batch_size,
