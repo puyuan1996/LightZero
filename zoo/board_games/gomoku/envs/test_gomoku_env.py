@@ -21,7 +21,9 @@ class TestGomokuEnv:
             # (str) The render mode. Options are 'None', 'state_realtime_mode', 'image_realtime_mode' or 'image_savefile_mode'.
             # If None, then the game will not be rendered.
             render_mode=None,
+            replay_path=None,
             screen_scaling=9,
+            alphazero_mcts_ctree=False,
         )
         env = GomokuEnv(cfg)
         obs = env.reset()
@@ -59,13 +61,15 @@ class TestGomokuEnv:
             channel_last=False,
             scale=True,
             agent_vs_human=False,
-            bot_action_type='v0',
+            bot_action_type='v1',
             prob_random_action_in_bot=0.,
             check_action_to_connect4_in_bot_v0=False,
             # (str) The render mode. Options are 'None', 'state_realtime_mode', 'image_realtime_mode' or 'image_savefile_mode'.
             # If None, then the game will not be rendered.
             render_mode='state_realtime_mode',  # 'image_realtime_mode' # "state_realtime_mode",
+            replay_path=None,
             screen_scaling=9,
+            alphazero_mcts_ctree=False,
         )
         env = GomokuEnv(cfg)
         env.reset()
@@ -90,5 +94,5 @@ class TestGomokuEnv:
                 break
 
 
-# test = TestGomokuEnv()
-# test.test_play_with_bot_mode()
+test = TestGomokuEnv()
+test.test_play_with_bot_mode()

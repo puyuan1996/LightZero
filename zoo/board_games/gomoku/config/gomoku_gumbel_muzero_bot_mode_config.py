@@ -14,7 +14,7 @@ max_env_step = int(1e6)
 
 board_size = 6  # default_size is 15
 bot_action_type = 'v0'  # options={'v0', 'v1'}
-prob_random_action_in_bot = 0.5
+prob_random_action_in_bot = 0.
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================

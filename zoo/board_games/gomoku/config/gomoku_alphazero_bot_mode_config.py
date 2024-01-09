@@ -3,7 +3,9 @@ from easydict import EasyDict
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-board_size = 6  # default_size is 15
+# board_size = 6  # default_size is 15
+board_size = 15  # default_size is 15
+
 collector_env_num = 8
 n_episode = 8
 evaluator_env_num = 3
@@ -11,7 +13,7 @@ num_simulations = 50
 update_per_collect = 50
 batch_size = 256
 max_env_step = int(5e5)
-prob_random_action_in_bot = 0.5
+prob_random_action_in_bot = 0.
 mcts_ctree = False
 # ==============================================================
 # end of the most frequently changed config specified by the user

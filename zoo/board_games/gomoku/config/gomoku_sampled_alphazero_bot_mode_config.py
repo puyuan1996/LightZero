@@ -15,7 +15,7 @@ n_episode = 8
 evaluator_env_num = 3
 batch_size = 256
 max_env_step = int(10e6)
-prob_random_action_in_bot = 0.5
+prob_random_action_in_bot = 0.
 mcts_ctree = False
 # ==============================================================
 # end of the most frequently changed config specified by the user

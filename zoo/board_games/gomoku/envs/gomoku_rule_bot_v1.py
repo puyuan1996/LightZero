@@ -12,12 +12,12 @@ import numpy as np
 
 class GomokuRuleBotV1(object):
     """
-        Overview:
-            The ``GomokuExpert`` used to output rule-based expert actions for Gomoku.
-            Input: board obs(:obj:`dict`) containing 'observation' and 'action_mask'.
-            Returns: action (:obj:`Int`). The output action is the index number i*board_w+j corresponding to the placement position (i, j).
-        Interfaces:
-            ``__init__``, ``get_action``.
+    Overview:
+        The ``GomokuExpert`` used to output rule-based expert actions for Gomoku.
+        Input: board obs(:obj:`dict`) containing 'observation' and 'action_mask'.
+        Returns: action (:obj:`Int`). The output action is the index number i*board_w+j corresponding to the placement position (i, j).
+    Interfaces:
+        ``__init__``, ``get_action``.
     """
 
     def __init__(self):
@@ -39,7 +39,7 @@ class GomokuRuleBotV1(object):
         Returns:
             - action (:obj:`Int`): The serial action number of the entered coordinates on the pieceboard.
         Examples:
-            - board_size = 6, (i,j)=(2,3) , action=3+2*6=15
+            - board_size = 6, (i,j)=(2,3), action=3+2*6=15
         """
         # location = (i,j), action=j+i*width
         return j + i * self.board_width
@@ -374,9 +374,9 @@ class GomokuRuleBotV1(object):
         # logging.info("O_location:{loc},score:{score}".format(loc=self.action_to_location(opponent_best_action), score=opponent_score))
 
         if current_score >= opponent_score:
-            # curent player should play current_best_action if the score that the current_player obtain when playing current_best_action
+            # current player should play current_best_action if the score that the current_player obtain when playing current_best_action
             # is larger than the score that the opponent_player obtains when it playing opponent_best_action
             return current_best_action
         else:
-            # curent player should play (Block) this opponent_best_action position if current_score < opponent_score
+            # current player should play (Block) this opponent_best_action position if current_score < opponent_score
             return opponent_best_action

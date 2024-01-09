@@ -729,12 +729,11 @@ class GomokuEnv(BaseEnv):
         else:
             if not os.path.exists(replay_path):
                 os.makedirs(replay_path)
-            filename = replay_path+f'/gomoku_{self.board_size}_{replay_name_suffix}.{format}'
+            filename = replay_path + f'/gomoku_{self.board_size}_{replay_name_suffix}.{format}'
 
         if format == 'gif':
             # Save frames as a GIF with a duration of 0.1 seconds per frame.
-            # imageio.mimsave(filename, self.frames, 'GIF', duration=0.1)
-            imageio.mimsave(filename, self.frames, 'GIF', fps=30, subrectangles=True)
+            imageio.mimsave(filename, self.frames, 'GIF', duration=0.1)
         elif format == 'mp4':
             # Save frames as an MP4 video with a frame rate of 30 frames per second.
             imageio.mimsave(filename, self.frames, fps=30, codec='mpeg4')

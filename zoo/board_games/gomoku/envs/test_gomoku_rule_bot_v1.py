@@ -5,7 +5,7 @@ from zoo.board_games.gomoku.envs.gomoku_env import GomokuEnv
 
 
 @pytest.mark.envtest
-class TestExpertActionV1:
+class TestBotActionV1:
 
     def test_naive(self):
         cfg = EasyDict(
@@ -18,6 +18,12 @@ class TestExpertActionV1:
             bot_action_type='v1',  # {'v0', 'v1', 'alpha_beta_pruning'}
             prob_random_action_in_bot=0.,
             check_action_to_connect4_in_bot_v0=False,
+            # (str) The render mode. Options are 'None', 'state_realtime_mode', 'image_realtime_mode' or 'image_savefile_mode'.
+            # If None, then the game will not be rendered.
+            render_mode='state_realtime_mode',  # 'image_realtime_mode' # "state_realtime_mode",
+            replay_path=None,
+            screen_scaling=9,
+            alphazero_mcts_ctree=False,
         )
         env = GomokuEnv(cfg)
         test_episodes = 1
@@ -26,10 +32,10 @@ class TestExpertActionV1:
             # print('init board state: ', obs)
             env.render()
             while True:
-                action = env.bot_action()
-                # action = env.random_action()
+                # action = env.bot_action()
+                action = env.random_action()
                 # action = env.human_to_action()
-                print('action index of player 1 is:', action)
+                # print('action index of player 1 is:', action)
                 print('player 1: ' + env.action_to_string(action))
                 obs, reward, done, info = env.step(action)
                 env.render()
@@ -42,7 +48,7 @@ class TestExpertActionV1:
 
                 action = env.bot_action()
                 # action = env.random_action()
-                print('action index of player 2 is:', action)
+                # print('action index of player 2 is:', action)
                 print('player 2: ' + env.action_to_string(action))
                 obs, reward, done, info = env.step(action)
                 env.render()
@@ -54,5 +60,5 @@ class TestExpertActionV1:
                     break
 
 
-test = TestExpertActionV1()
+test = TestBotActionV1()
 test.test_naive()

@@ -11,7 +11,7 @@ num_simulations = 50
 update_per_collect = 100  # 8*36=288
 batch_size = 256
 max_env_step = int(10e6)
-prob_random_action_in_bot = 0.5
+prob_random_action_in_bot = 0.
 mcts_ctree = False
 num_of_sampled_actions = 20
 # ==============================================================

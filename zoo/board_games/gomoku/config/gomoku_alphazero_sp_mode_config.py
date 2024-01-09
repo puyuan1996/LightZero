@@ -11,7 +11,7 @@ num_simulations = 50
 update_per_collect = 50
 batch_size = 256
 max_env_step = int(5e5)
-prob_random_action_in_bot = 0.5
+prob_random_action_in_bot = 0.
 mcts_ctree = True
 # ==============================================================
 # end of the most frequently changed config specified by the user
