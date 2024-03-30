@@ -58,8 +58,8 @@ cfg['world_model'] = {
     #  'max_blocks': 1030, #  memory_length = 1000
     # "max_tokens": 2 * 1030,
 
-    'embed_dim': 64,  # TODO：for memory # same as <Transformer shine in RL> paper
-    # 'embed_dim': 96,  # TODO：for memory # same as <Transformer shine in RL> paper
+    # 'embed_dim': 64,  # TODO：for memory # same as <Transformer shine in RL> paper
+    'embed_dim': 96,  # TODO：for memory # same as <Transformer shine in RL> paper
     'group_size': 8,  # NOTE
 
     'attention': 'causal',

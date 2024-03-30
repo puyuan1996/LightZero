@@ -60,7 +60,7 @@ eps_greedy_exploration_in_collect = True
 
 memory_xzero_config = dict(
     # mcts_ctree.py muzero_collector muzero_evaluator
-    exp_name=f'data_memory_{env_id}_0323_debug/{env_id}_memlen-{memory_length}_xzero_H{num_unroll_steps}_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_bs{batch_size}'
+    exp_name=f'data_memory_{env_id}_debug/{env_id}_memlen-{memory_length}_xzero_H{num_unroll_steps}_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_bs{batch_size}'
              f'_collect-eps-{eps_greedy_exploration_in_collect}_temp-final-steps-{threshold_training_steps_for_final_temperature}'
              f'_pelw1e-4_quan15_groupkl_emd64_seed{seed}_eval{evaluator_env_num}_nl2-nh2_soft005',
     # exp_name=f'data_memory_{env_id}_fixscale_no-dynamic-seed/{env_id}_memlen-{memory_length}_xzero_H{num_unroll_steps}_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}-fix_rr{reanalyze_ratio}_bs{batch_size}'
@@ -97,6 +97,7 @@ memory_xzero_config = dict(
             ),
         ),
         model_path=None,
+        # model_path='/Users/puyuan/code/LightZero/data_memory/visual_match_memlen-0_xzero_H16_ns50_upcNone-mur0.25_rr0_bs64_collect-eps-True_temp-final-steps-50000_pelw1e-4_quan15_groupkl_emd96_seed0_eval8_nl2-nh2_soft005_reclw005/ckpt/ckpt_best.pth.tar',
         # model_path='/Users/puyuan/code/LightZero/data_memory/visual_match_memlen-0_xzero_H16_ns50_upcNone-mur0.25_rr0_bs64_collect-eps-True_temp-final-steps-50000_pelw1e-4_quan15_groupkl_emd96_seed0_eval8_nl2-nh2_soft005_reclw005/ckpt/ckpt_best.pth.tar',
         # model_path='/Users/puyuan/code/LightZero/data_memory/visual_match_memlen-0_xzero_H17_ns50_upcNone-mur0.25_rr0_bs64_collect-eps-True_temp-final-steps-50000_pelw1e-4_quan15_groupkl_emd64_seed0_eval8_nl2-nh2_soft005_reclw005/ckpt/iteration_180000.pth.tar',
         transformer_start_after_envsteps=int(0),
