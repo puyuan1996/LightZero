@@ -35,6 +35,7 @@ class TestMemoryEnvLightZero(unittest.TestCase):
             render=False,  # Whether to enable real-time rendering
             scale_observation=True,  # Whether to scale the observation
             flate_observation=False,  # Whether to flatten the observation
+            obs_max_scale=100,  # Maximum value of the observation
         )
         self.env = MemoryEnvLightZero(EasyDict(self.config))
         self.env.seed(123)

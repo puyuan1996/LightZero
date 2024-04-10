@@ -35,6 +35,7 @@ flags.DEFINE_enum('game', 'key_to_door',
 
 def main(unused_argv):
     rng = np.random.RandomState()
+    print(f"rng:{rng}")
 
     if FLAGS.game == 'key_to_door':
         game = key_to_door.Game(rng)
