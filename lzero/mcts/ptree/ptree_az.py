@@ -185,13 +185,13 @@ class MCTS(object):
         self._num_simulations = self._cfg.get('num_simulations', 800)
 
         # UCB formula
-        self._pb_c_base = self._cfg.get('pb_c_base', 19652)  # 19652
-        self._pb_c_init = self._cfg.get('pb_c_init', 1.25)  # 1.25
+        self._pb_c_base = self._cfg.get('pb_c_base', 19652)
+        self._pb_c_init = self._cfg.get('pb_c_init', 1.25)
 
         # Root prior exploration noise.
         self._root_dirichlet_alpha = self._cfg.get(
             'root_dirichlet_alpha', 0.3
-        )  # 0.3  # for chess, 0.03 for Go and 0.15 for shogi.
+        )  # 0.3 for chess, 0.03 for Go and 0.15 for shogi.
         self._root_noise_weight = self._cfg.get('root_noise_weight', 0.25)
 
         self.simulate_env = simulate_env
@@ -264,8 +264,6 @@ class MCTS(object):
         visits_t = torch.pow(visits_t, 1/temperature)
         action_probs = (visits_t / visits_t.sum()).numpy()
 
-        # action_probs = nn.functional.softmax(1.0 / temperature * np.log(torch.as_tensor(visits) + 1e-10), dim=0).numpy()
-
         # Choose the next action to take based on the action probabilities.
         if sample:
             action = np.random.choice(actions, p=action_probs)
@@ -312,7 +310,7 @@ class MCTS(object):
                     leaf_value = 0
                 else:
                     # To maintain consistency with the perspective of the neural network, the value of a terminal
-                    # node is also calculated from the perspective of the current_player of the terminal node,
+                    # node is also calculated from the perspective of the current_player in the terminal node,
                     # which is convenient for subsequent updates.
                     leaf_value = 1 if simulate_env.current_player == winner else -1
 
