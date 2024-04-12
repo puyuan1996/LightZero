@@ -28,13 +28,15 @@ import visual_match
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_enum('game', 'key_to_door',
+# flags.DEFINE_enum('game', 'key_to_door',
+#                   ['key_to_door', 'visual_match'],
+#                   'The name of the game')
+flags.DEFINE_enum('game', 'visual_match',
                   ['key_to_door', 'visual_match'],
                   'The name of the game')
 
-
 def main(unused_argv):
-    rng = np.random.RandomState()
+    rng = np.random.RandomState(seed=3)
     print(f"rng:{rng}")
 
     if FLAGS.game == 'key_to_door':
