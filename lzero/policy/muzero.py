@@ -528,6 +528,7 @@ class MuZeroPolicy(Policy):
                 self._cfg.value_loss_weight * value_loss + self._cfg.reward_loss_weight * reward_loss +
                 self._cfg.policy_entropy_loss_weight * policy_entropy_loss
         )
+        # weights is the importance sampling weights.
         weighted_total_loss = (weights * loss).mean()
 
         gradient_scale = 1 / self._cfg.num_unroll_steps
