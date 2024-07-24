@@ -272,7 +272,7 @@ class SoftModulizationHead(nn.Module):
         task_embedding = self.task_embed_layer(task_id_vector).to(self.device)
         print(f"task_embedding.shape before * x :  {task_embedding.shape}")
         task_embedding = F.relu(task_embedding * x)
-        task_embedding = self.gating_fcs(task_embedding)
+        task_embedding = self.gating_fcs(task_embedding)  # 为什么这里要通过这个self.gating_fcs呢？
         print(f"task_embedding.shape after * x:  {task_embedding.shape}")
         
         weights = []
@@ -284,8 +284,7 @@ class SoftModulizationHead(nn.Module):
         # Calculate weights between layers
         raw_weight = self.gating_weight_fc_0(F.relu(task_embedding))
         raw_weight = raw_weight.view(weight_shape)
-        
-        
+
         softmax_weight = F.softmax(raw_weight, dim=-1)
         print(f"softmax_weight:  {softmax_weight.shape}")
         flatten_weight = softmax_weight.view(flatten_shape)
@@ -330,7 +329,10 @@ class SoftModulizationHead(nn.Module):
                 
                 print(f"obs_mid_outputs.shape: {obs_mid_outputs.shape}")
                 print(f"weights[{i}][..., {j}, :].unsqueeze(-1).shape: {weights[i][..., j, :].unsqueeze(-1).shape}")
-                next_module_input = F.relu((obs_mid_outputs * weights[i][..., j, :].unsqueeze(-1)).sum(dim=-2))
+                try:
+                    next_module_input = F.relu((obs_mid_outputs * weights[i][..., j, :].unsqueeze(-1)).sum(dim=-2))
+                except Exception as e:
+                    print(e)
                 new_module_outputs.append((next_layer_module(next_module_input, num_steps=num_steps, prev_steps=prev_steps)).unsqueeze(-2))
 
             obs_mid_outputs = torch.cat(new_module_outputs, dim=-2)

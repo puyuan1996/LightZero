@@ -15,8 +15,8 @@ def create_config(env_id, action_space_size, collector_env_num, evaluator_env_nu
             manager=dict(shared_memory=False, ),
             full_action_space=True,
             # ===== only for debug =====
-            # collect_max_episode_steps=int(50),
-            # eval_max_episode_steps=int(50),
+            collect_max_episode_steps=int(50),
+            eval_max_episode_steps=int(50),
             # collect_max_episode_steps=int(500),
             # eval_max_episode_steps=int(500),
         ),
@@ -43,8 +43,8 @@ def create_config(env_id, action_space_size, collector_env_num, evaluator_env_nu
                     max_blocks=num_unroll_steps,
                     max_tokens=2 * num_unroll_steps,
                     context_length=2 * infer_context_length,
-                    # device='cpu',  # 'cuda',
-                    device='cuda',  # 'cuda',
+                    device='cpu',  # 'cuda',
+                    # device='cuda',  # 'cuda',
                     action_space_size=action_space_size,
                     num_layers=4,  # NOTE
                     num_heads=8,
@@ -165,15 +165,15 @@ if __name__ == "__main__":
     num_unroll_steps = 10
     infer_context_length = 4
     norm_type = 'LN'
-    # norm_type = 'BN'
+
 
 
     # ======== TODO: only for debug ========
-    # collector_env_num = 3
-    # n_episode = 3
-    # evaluator_env_num = 2
-    # num_simulations = 5
-    # batch_size = [4, 4, 4, 4]
+    collector_env_num = 3
+    n_episode = 3
+    evaluator_env_num = 3
+    num_simulations = 5
+    batch_size = [4, 4, 4, 4]
 
     configs = generate_configs(env_id_list, action_space_size, collector_env_num, n_episode, evaluator_env_num, num_simulations, reanalyze_ratio, batch_size, num_unroll_steps, infer_context_length, norm_type, seed)
 
