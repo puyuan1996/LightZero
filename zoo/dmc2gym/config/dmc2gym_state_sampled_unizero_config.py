@@ -20,7 +20,7 @@ task_name = env_id.split('-')[1]
 
 continuous_action_space = True
 K = 20  # num_of_sampled_actions
-# K = 5  # num_of_sampled_actions
+# K = 5   # num_of_sampled_actions
 
 collector_env_num = 8
 n_episode = 8
@@ -50,6 +50,9 @@ norm_type = 'LN'
 seed = 0
 
 # for debug
+evaluator_env_num = 1
+num_simulations = 50
+
 # collector_env_num = 2
 # n_episode = 2
 # evaluator_env_num = 2
@@ -60,8 +63,8 @@ seed = 0
 # ==============================================================
 
 dmc2gym_state_cont_sampled_unizero_config = dict(
-    exp_name=f'data_sampled_unizero_0901/dmc2gym_{env_id}_state_cont_sampled_unizero_K{K}_ns{num_simulations}_upc{update_per_collect}-rr{replay_ratio}_rer{reanalyze_ratio}_H{num_unroll_steps}-eval{infer_context_length}_bs{batch_size}_{norm_type}_seed{seed}_policy-head-layer-num2_pew5e-3_disfac1_tempdecay_rbs5e4',
-    # exp_name=f'data_sampled_unizero_0901_debug/dmc2gym_{env_id}_state_cont_sampled_unizero_ns{num_simulations}_upc{update_per_collect}-rr{replay_ratio}_rer{reanalyze_ratio}_H{num_unroll_steps}_bs{batch_size}_{norm_type}_seed{seed}_policy-head-layer-num2_pew5e-3_disfac1',
+    # exp_name=f'data_sampled_unizero_0901/dmc2gym_{env_id}_state_cont_sampled_unizero_K{K}_ns{num_simulations}_upc{update_per_collect}-rr{replay_ratio}_rer{reanalyze_ratio}_H{num_unroll_steps}-eval{infer_context_length}_bs{batch_size}_{norm_type}_seed{seed}_policy-head-layer-num2_pew5e-3_disfac1_tempdecay_rbs5e4',
+    exp_name=f'data_sampled_unizero_0901_debug/dmc2gym_{env_id}_state_cont_sampled_unizero_ns{num_simulations}_upc{update_per_collect}-rr{replay_ratio}_rer{reanalyze_ratio}_H{num_unroll_steps}_bs{batch_size}_{norm_type}_seed{seed}_policy-head-layer-num2_pew5e-3_disfac1',
     env=dict(
         env_id='dmc2gym-v0',
         domain_name=domain_name,
@@ -70,12 +73,15 @@ dmc2gym_state_cont_sampled_unizero_config = dict(
         # from_pixels=True,  # vector/state obs
         frame_skip=2,
         continuous=True,
-        save_replay_gif=False,
-        # save_replay_gif=True,
-        replay_path_gif='./replay_gif',
+        # save_replay_gif=False,
+        save_replay_gif=True,
+        render_image=True,
+        replay_path_gif='./replay_gif_cheetah_suz_700_ns100',
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
         n_evaluator_episode=evaluator_env_num,
+        # collect_max_episode_steps=int(10),
+        # eval_max_episode_steps=int(10),
         manager=dict(shared_memory=False, ),
     ),
     policy=dict(
@@ -91,8 +97,8 @@ dmc2gym_state_cont_sampled_unizero_config = dict(
                 policy_entropy_loss_weight=5e-3,
                 continuous_action_space=continuous_action_space,
                 num_of_sampled_actions=K,
-                # sigma_type='conditioned',
-                sigma_type='fixed',
+                sigma_type='conditioned',
+                # sigma_type='fixed',
                 fixed_sigma_value=0.5,
                 # fixed_sigma_value=0.1, # 性能差
                 bound_type=None,
@@ -111,8 +117,8 @@ dmc2gym_state_cont_sampled_unizero_config = dict(
         ),
         learn=dict(learner=dict(hook=dict(save_ckpt_after_iter=200000,),),),  # default is 10000
         # (str) The path of the pretrained model. If None, the model will be initialized by the default model.
-        model_path=None,
-        # model_path='/mnt/afs/niuyazhe/code/LightZero/data_sampled_unizero_0901/dmc2gym_cheetah-run_state_cont_sampled_unizero_ns50_upcNone-rr0.25_rer0_H10_bs64_LN_seed0_policy-head-layer-num2_pew5e-3_disfac1/ckpt/iteration_100000.pth.tar',
+        # model_path=None,
+        model_path='/Users/puyuan/code/LightZero/data_dmc/ckpt_best.pth.tar',
         num_unroll_steps=num_unroll_steps,
         cuda=True,
         use_augmentation=False,
@@ -152,8 +158,8 @@ dmc2gym_state_cont_sampled_unizero_create_config = dict(
         type='dmc2gym_lightzero',
         import_names=['zoo.dmc2gym.envs.dmc2gym_lightzero_env'],
     ),
-    env_manager=dict(type='subprocess'),
-    # env_manager=dict(type='base'),
+    # env_manager=dict(type='subprocess'),
+    env_manager=dict(type='base'),
     policy=dict(
         type='sampled_unizero',
         import_names=['lzero.policy.sampled_unizero'],

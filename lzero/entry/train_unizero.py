@@ -110,6 +110,7 @@ def train_unizero(
 
     # TODO: for visualize
     stop, reward = evaluator.eval(learner.save_checkpoint, learner.train_iter, collector.envstep)
+    import sys;sys.exit(0)
 
     while True:
         # Log buffer memory usage
