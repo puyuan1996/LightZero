@@ -15,8 +15,8 @@ def main(env_id, seed):
     num_simulations = 50
     max_env_step = int(5e5)
     batch_size = 64
-    num_layers = 4
-    replay_ratio = 1
+    num_layers = 2
+    replay_ratio = 0.25
     num_unroll_steps = 10
     infer_context_length = 4
 

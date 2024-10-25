@@ -25,9 +25,9 @@ def main(env_id, seed):
     reanalyze_ratio = 0
     batch_size = 64
     num_layers = 2
-    replay_ratio = 0.25
-    num_unroll_steps = 10
-    infer_context_length = 4
+    replay_ratio = 0.1
+    num_unroll_steps = 5
+    infer_context_length = 2
     norm_type = 'LN'
 
     # Defines the frequency of reanalysis. E.g., 1 means reanalyze once per epoch, 2 means reanalyze once every two epochs.
@@ -83,8 +83,7 @@ def main(env_id, seed):
                     policy_entropy_weight=5e-3,
                     continuous_action_space=continuous_action_space,
                     num_of_sampled_actions=K,
-                    # sigma_type='conditioned',
-                    sigma_type='fixed',
+                    sigma_type='conditioned',
                     fixed_sigma_value=0.5,
                     bound_type=None,
                     model_type='mlp',
@@ -116,7 +115,7 @@ def main(env_id, seed):
             learning_rate=1e-4,
             grad_clip_value=5,
             manual_temperature_decay=False,
-            cos_lr_scheduler=False,
+            cos_lr_scheduler=True,
             num_segments=num_segments,
             train_start_after_envsteps=2000,
             game_segment_length=game_segment_length,

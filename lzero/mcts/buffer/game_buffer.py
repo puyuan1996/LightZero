@@ -261,7 +261,7 @@ class GameBuffer(ABC, object):
             for i in range(samples_per_segment):
                 game_segment_list.append(game_segment)
                 pos_in_game_segment = i * self._cfg.num_unroll_steps
-                if pos_in_game_segment >= len(game_segment):
+                if pos_in_game_segment >= len(game_segment): # TODO: check if this is correct
                     pos_in_game_segment = np.random.choice(len(game_segment), 1).item()
                 pos_in_game_segment_list.append(pos_in_game_segment)
                 batch_index_list.append(game_segment_idx)
