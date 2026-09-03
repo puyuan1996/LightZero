@@ -33,7 +33,7 @@ class _ScalarWriter:
         self.calls.append((args, kwargs))
 
 
-def test_tensorboard_writer_logs_only_canonical_whitelist_by_default():
+def test_tensorboard_writer_filters_only_learner_and_preserves_worker_metrics():
     raw_writer = _ScalarWriter()
     writer = _MetricFilteredWriter(
         raw_writer,
@@ -44,10 +44,17 @@ def test_tensorboard_writer_logs_only_canonical_whitelist_by_default():
 
     writer.add_scalar('learner_iter/loss/total_avg', 1.0, 3)
     writer.add_scalar('learner_iter/analysis/unused_avg', 2.0, 3)
+    writer.add_scalar('collector_iter/reward_mean', 4.0, 3)
+    writer.add_scalar('collector_step/total_collect_time', 5.0, 100)
+    writer.add_scalar('evaluator_iter/reward_std', 6.0, 3)
     writer.add_scalar('evaluator_step/eval/mean_return', 10.0, 100)
 
     assert [call[0][0] for call in raw_writer.calls] == [
-        'learner_iter/loss/total_avg', 'evaluator_step/eval/mean_return'
+        'learner_iter/loss/total_avg',
+        'collector_iter/reward_mean',
+        'collector_step/total_collect_time',
+        'evaluator_iter/reward_std',
+        'evaluator_step/eval/mean_return',
     ]
 
 
@@ -56,6 +63,15 @@ def test_tensorboard_writer_can_restore_all_scalar_metrics():
     writer = _MetricFilteredWriter(raw_writer, enabled=True, metric_filter={}, log_all=True)
     writer.add_scalar('learner_iter/debug/value_avg', 1.0, 2)
     assert len(raw_writer.calls) == 1
+
+
+def test_tensorboard_writer_log_metric_false_disables_every_namespace():
+    raw_writer = _ScalarWriter()
+    writer = _MetricFilteredWriter(raw_writer, enabled=False, metric_filter={}, log_all=True)
+    writer.add_scalar('learner_iter/loss/total_avg', 1.0, 2)
+    writer.add_scalar('collector_iter/reward_mean', 2.0, 2)
+    writer.add_scalar('evaluator_iter/reward_mean', 3.0, 2)
+    assert raw_writer.calls == []
 
 
 class _Learner:

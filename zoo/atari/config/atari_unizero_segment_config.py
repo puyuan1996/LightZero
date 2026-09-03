@@ -1,11 +1,12 @@
-"""Stable UniZero Atari config: the best recipe from the 2026-08 3M matrix.
+"""Stable UniZero Atari config: the current representation-stability recipe.
 
-This mirrors the winning ``v3`` arm of the preregistered MsPacman 3M experiment
-matrix (the historical best recipe with ``value_loss_weight=0.5``) with the
+This uses the latest MsPacman evidence-backed defaults (``obs_loss_weight=1``
+and separate encoder clipping) with the
 experimental mechanisms (raw-token KV rebuild, open-loop consistency loss,
 contextual value bootstrap) turned off. Those and other ablation/diagnostic
 knobs live in ``atari_unizero_segment_experimental_config.py``, whose defaults
-reproduce the full v3 recipe.
+include the same evidence-backed observation/clipping defaults while exposing
+the additional experimental switches.
 """
 
 from easydict import EasyDict
@@ -24,7 +25,12 @@ def build_config(
 ):
     action_space_size = atari_env_action_space_map[env_id]
     use_augmentation = bool(use_augmentation)
-    grad_clip_mode = _resolve_grad_clip_mode(use_augmentation, grad_clip_mode_override)
+    resolved_grad_clip_mode_override = (
+        'separate_encoder' if grad_clip_mode_override is None else grad_clip_mode_override
+    )
+    grad_clip_mode = _resolve_grad_clip_mode(
+        use_augmentation, resolved_grad_clip_mode_override
+    )
 
     # ==============================================================
     # begin of the most frequently changed config specified by the user
@@ -97,6 +103,12 @@ def build_config(
                         env_num=collector_env_num,
                         num_simulations=num_simulations,
                         game_segment_length=game_segment_length,
+                        # Keep auxiliary recurrent supervision aligned with
+                        # the learner-level component weights.
+                        obs_loss_weight=1.0,
+                        reward_loss_weight=1.0,
+                        value_loss_weight=0.5,
+                        policy_loss_weight=1.0,
                         device='cuda',
                         # Uniform-replay baseline: skip TD-priority computation as well
                         # as prioritized sampling to avoid redundant learner work.
@@ -105,8 +117,8 @@ def build_config(
                         use_normal_head=True,
                         optim_type='AdamW_mix_lr_wdecay',
                         root_cache_key_round_decimals=0,
-                        # v3 rebuilds the KV window exactly from retained raw tokens; the
-                        # stable config keeps the legacy update path (experimental-only).
+                        # KV rebuild remains experimental; the stable default keeps the
+                        # legacy update path while isolating the encoder gradients.
                         # rebuild_kv_window_from_tokens=True,
                         rebuild_kv_window_from_tokens=False,
                         # v3 enables the short differentiable MCTS-style latent rollout
@@ -139,7 +151,7 @@ def build_config(
                 num_simulations=num_simulations,
                 collect_num_simulations=collect_num_simulations,
                 fixed_temperature_value=0.25,
-                obs_loss_weight=10.0,
+                obs_loss_weight=1.0,
                 value_loss_weight=0.5,
                 grad_clip_value=5.0,
                 grad_clip_mode=grad_clip_mode,
@@ -201,6 +213,7 @@ def build_config(
             else 'aug-globalclip' if use_augmentation
             else 'noaug'
         )
+        clipping_tag = f'clip-{grad_clip_mode}'
         stab_fix_tag = 'stabfix' if world_model_config.use_policy_logits_clip else 'nostabfix'
         rebuild_kv_tag = (
             'rebuildkv' if world_model_config.rebuild_kv_window_from_tokens else 'norebuildkv'
@@ -215,7 +228,7 @@ def build_config(
             f'_nlayer{num_layers}_gsl{game_segment_length}_bs{batch_size}'
             f'_rr{replay_ratio:g}_temp{policy_config.fixed_temperature_value:g}'
             f'_obs{policy_config.obs_loss_weight:g}_value{policy_config.value_loss_weight:g}'
-            f'_{stab_fix_tag}_{rebuild_kv_tag}_{contextual_reanalysis_tag}'
+            f'_{stab_fix_tag}_{clipping_tag}_{rebuild_kv_tag}_{contextual_reanalysis_tag}'
             f'_reanalyze{policy_config.buffer_reanalyze_freq:g}_{bootstrap_tag}'
             f'_olc{world_model_config.open_loop_consistency_loss_weight:g}'
             f'_{priority_tag}_{augmentation_tag}'
@@ -273,7 +286,7 @@ if __name__ == '__main__':
     parser.set_defaults(use_augmentation=False)
     parser.add_argument(
         '--grad-clip-mode', choices=('global', 'separate_encoder'), default=None,
-        help='Override clipping topology; normally inferred from the augmentation setting.',
+        help='Override clipping topology; defaults to separate_encoder (current best recipe).',
     )
     parser.add_argument(
         '--run-name', type=str, default=None,

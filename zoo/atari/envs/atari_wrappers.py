@@ -153,6 +153,35 @@ class TimeLimit(gym.Wrapper):
         self._elapsed_steps = 0
         return self.env.reset(**kwargs)
 
+
+class RawRewardInfoWrapper(gym.Wrapper):
+    """Expose the pre-clipping reward while preserving the legacy step API.
+
+    Atari collection applies ``ClipRewardWrapper`` for stable world-model
+    training, whereas evaluation deliberately keeps the raw ALE score.  The
+    outer LightZero environment therefore needs both values in order to emit
+    unambiguous telemetry.  This wrapper is placed immediately before reward
+    clipping, so the recorded value already includes action-repeat/frame-skip
+    aggregation but has not been clipped.
+    """
+
+    def step(self, action):
+        result = self.env.step(action)
+        if len(result) == 5:  # Gymnasium compatibility for custom wrappers.
+            observation, reward, terminated, truncated, info = result
+            done = bool(terminated or truncated)
+            info = dict(info or {})
+            info['raw_reward'] = np.asarray(reward).copy()
+            return observation, reward, done, info
+
+        observation, reward, done, info = result
+        info = dict(info or {})
+        info['raw_reward'] = np.asarray(reward).copy()
+        return observation, reward, done, info
+
+    def reset(self, **kwargs):
+        return self.env.reset(**kwargs)
+
 def wrap_lightzero(config: EasyDict, episode_life: bool, clip_rewards: bool) -> gym.Env:
     """
     Overview:
@@ -218,6 +247,10 @@ def wrap_lightzero(config: EasyDict, episode_life: bool, clip_rewards: bool) -> 
         )
     if config.scale:
         env = ScaledFloatFrameWrapper(env)
+
+    # Keep the raw, frame-skip-aggregated reward available to the outer
+    # LightZero environment before optionally clipping it for collection.
+    env = RawRewardInfoWrapper(env)
     if clip_rewards:
         env = ClipRewardWrapper(env)
 

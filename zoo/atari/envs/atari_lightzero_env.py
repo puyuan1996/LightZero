@@ -35,6 +35,27 @@ def _reset_with_numpy_seed(env, reset_seed: int):
         np.random.set_state(process_rng_state)
 
 
+def atari_episode_diagnostics(info: dict, cfg: EasyDict, episode_length: int) -> dict:
+    """Normalize terminal metadata while allowing env-specific scalar extensions."""
+    time_limit_truncated = bool(info.get('TimeLimit.truncated', False))
+    episode_info = {
+        'episode/terminated_by_time_limit': float(time_limit_truncated),
+        'episode/natural_termination': float(not time_limit_truncated),
+        'episode/final_length': float(episode_length),
+    }
+    diagnostic_info_keys = getattr(
+        cfg,
+        'episode_diagnostic_info_keys',
+        ('lives', 'episode_frame_number', 'frame_number', 'room', 'level'),
+    )
+    for key in diagnostic_info_keys:
+        value = info.get(key)
+        if isinstance(value, (bool, int, float, np.integer, np.floating)):
+            metric_name = str(key).replace('.', '_').replace('/', '_')
+            episode_info[f'atari/{metric_name}'] = float(value)
+    return episode_info
+
+
 @ENV_REGISTRY.register('atari_lightzero')
 class AtariEnvLightZero(BaseEnv):
     """
@@ -134,6 +155,8 @@ class AtariEnvLightZero(BaseEnv):
         self.clip_rewards = self.cfg.clip_rewards
         self.episode_life = self.cfg.episode_life
         self._timestep = 0
+        self._raw_episode_return = 0.
+        self._semantics_logged = False
 
     def reset(self) -> dict:
         """
@@ -195,7 +218,16 @@ class AtariEnvLightZero(BaseEnv):
 
         self.obs = to_ndarray(obs)
         self._eval_episode_return = 0.
+        self._raw_episode_return = 0.
         self._timestep = 0
+        if not self._semantics_logged:
+            mode = 'collector' if self.cfg.episode_life or self.cfg.clip_rewards else 'evaluator'
+            logging.info(
+                'Atari reward semantics: mode=%s, episode_life=%s, clip_rewards=%s; '
+                'reward_mean is retained for compatibility, use explicit collect/eval metrics.',
+                mode, bool(self.cfg.episode_life), bool(self.cfg.clip_rewards),
+            )
+            self._semantics_logged = True
         obs = self.observe()
         return obs
 
@@ -211,6 +243,8 @@ class AtariEnvLightZero(BaseEnv):
         obs, reward, done, info = self._env.step(action)
         self.obs = to_ndarray(obs)
         self.reward = np.array(reward).astype(np.float32)
+        raw_reward = np.asarray(info.get('raw_reward', reward), dtype=np.float32)
+        self._raw_episode_return += raw_reward
         self._eval_episode_return += self.reward
         self._timestep += 1
         # if self._timestep % 200 == 0:
@@ -218,7 +252,17 @@ class AtariEnvLightZero(BaseEnv):
         observation = self.observe()
         if done:
             logging.info(f'one episode done! total episode length is: {self._timestep}')
+            # ``eval_episode_return`` is a historical field consumed by the
+            # collector/evaluator stack.  Keep it unchanged, while exposing
+            # explicit values so clipped life-level collection returns cannot
+            # be mistaken for raw full-game evaluation scores.
             info['eval_episode_return'] = self._eval_episode_return
+            info['clipped_episode_return'] = self._eval_episode_return
+            info['raw_episode_return'] = self._raw_episode_return
+            # ALE/Gymnasium versions expose different scalar metadata. Preserve a
+            # configurable, environment-agnostic subset so new games can add room/level
+            # keys without changing collector/evaluator core logic.
+            info['episode_info'] = atari_episode_diagnostics(info, self.cfg, self._timestep)
             logging.debug(f'one episode of {self.cfg.env_id} done')
 
         return BaseEnvTimestep(observation, self.reward, done, info)

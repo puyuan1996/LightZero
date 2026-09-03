@@ -32,6 +32,9 @@ DEFAULT_TB_METRIC_FILTER = {
         'reanalyze/count', 'reanalyze/freq_actual', 'reanalyze/target_age_mean',
         'simulation/depth_mean', 'simulation/value_mean', 'simulation/policy_entropy',
         'segment/length_actual', 'segment/valid_ratio', 'segment/bootstrap_context_len',
+        'target/param_lag_l2', 'target/param_lag_relative',
+        'target/latent_lag_l2_mean', 'target/latent_lag_relative_mean',
+        'target/latent_cosine_mean',
         'grad_norm', 'lr', 'param_norm', 'weight_decay',
         'grad/clip_encoder_scale', 'grad/clip_non_encoder_scale',
         'grad/encoder_pre_clip_norm', 'grad/non_encoder_pre_clip_norm',
@@ -145,6 +148,86 @@ def value_calibration_metrics(
         'value_calibration/mae': error.abs().mean().item(),
         'value_calibration/rmse': error.square().mean().sqrt().item(),
         'value_calibration/correlation': correlation.item(),
+    }
+
+
+def masked_replay_target_metrics(
+        rewards: torch.Tensor, values: torch.Tensor, mask: torch.Tensor
+) -> Dict[str, float]:
+    """Summarize the actual valid reward/value targets sampled from replay."""
+    valid = mask.bool()
+    reward = rewards.detach().float()[valid]
+    value = values.detach().float()[valid]
+    if reward.numel() == 0 or value.numel() == 0:
+        raise ValueError('Replay target diagnostics require at least one valid step')
+    return {
+        'replay/target_reward_mean': reward.mean().item(),
+        'replay/target_reward_std': reward.std(unbiased=False).item(),
+        'replay/target_reward_min': reward.min().item(),
+        'replay/target_reward_max': reward.max().item(),
+        'replay/target_reward_nonzero_fraction': (reward != 0).float().mean().item(),
+        'replay/target_reward_positive_fraction': (reward > 0).float().mean().item(),
+        'replay/target_value_mean': value.mean().item(),
+        'replay/target_value_std': value.std(unbiased=False).item(),
+        'replay/target_value_min': value.min().item(),
+        'replay/target_value_max': value.max().item(),
+    }
+
+
+def target_parameter_lag_metrics(
+        online_module: torch.nn.Module, target_module: torch.nn.Module
+) -> Dict[str, float]:
+    """Measure the real EMA lag without flattening the full model into a new vector."""
+    online_parameters = dict(online_module.named_parameters())
+    target_parameters = dict(target_module.named_parameters())
+    if online_parameters.keys() != target_parameters.keys():
+        missing = sorted(online_parameters.keys() ^ target_parameters.keys())
+        raise RuntimeError(f'Online/target parameter sets differ: {missing[:5]}')
+    first_parameter = next(iter(online_parameters.values()), None)
+    if first_parameter is None:
+        raise ValueError('Target-lag diagnostics require a parameterized module')
+    device = first_parameter.device
+    difference_sq = torch.zeros((), device=device, dtype=torch.float32)
+    online_sq = torch.zeros((), device=device, dtype=torch.float32)
+    target_sq = torch.zeros((), device=device, dtype=torch.float32)
+    with torch.no_grad():
+        for name, online_parameter in online_parameters.items():
+            online = online_parameter.detach().float()
+            target = target_parameters[name].detach().float()
+            difference_sq += (online - target).square().sum()
+            online_sq += online.square().sum()
+            target_sq += target.square().sum()
+    lag_l2 = difference_sq.sqrt()
+    online_l2 = online_sq.sqrt()
+    target_l2 = target_sq.sqrt()
+    return {
+        'target/param_lag_l2': lag_l2.item(),
+        'target/param_lag_relative': (lag_l2 / online_l2.clamp_min(1e-12)).item(),
+        'target/online_param_l2': online_l2.item(),
+        'target/ema_param_l2': target_l2.item(),
+    }
+
+
+def target_latent_lag_metrics(
+        online_embeddings: torch.Tensor, target_embeddings: torch.Tensor
+) -> Dict[str, float]:
+    """Measure encoder representation lag on the exact observations used by the loss."""
+    online = online_embeddings.detach().float()
+    target = target_embeddings.detach().float()
+    if online.shape != target.shape:
+        raise ValueError(
+            f'Online/target embedding shapes differ: {tuple(online.shape)} vs {tuple(target.shape)}'
+        )
+    flattened_online = online.reshape(-1, online.shape[-1])
+    flattened_target = target.reshape(-1, target.shape[-1])
+    lag = (flattened_online - flattened_target).norm(dim=-1)
+    target_norm = flattened_target.norm(dim=-1).clamp_min(1e-12)
+    cosine = F.cosine_similarity(flattened_online, flattened_target, dim=-1)
+    return {
+        'target/latent_lag_l2_mean': lag.mean().item(),
+        'target/latent_lag_relative_mean': (lag / target_norm).mean().item(),
+        'target/latent_cosine_mean': cosine.mean().item(),
+        'target/latent_l2_mean': target_norm.mean().item(),
     }
 
 
@@ -1469,6 +1552,15 @@ class UniZeroPolicy(MuZeroPolicy):
                     norm_log_dict['embeddings/obs/norm_max'] = emb_norms.max().item()
                     norm_log_dict['embeddings/obs/norm_min'] = emb_norms.min().item()
 
+                target_obs_embeddings = losses.intermediate_losses.get('target_obs_embeddings')
+                if obs_embeddings is not None and target_obs_embeddings is not None:
+                    norm_log_dict.update(target_latent_lag_metrics(
+                        obs_embeddings, target_obs_embeddings
+                    ))
+                norm_log_dict.update(target_parameter_lag_metrics(
+                    self._learn_model.world_model, self._target_model.world_model
+                ))
+
                 # ==================== Early Warning System ====================
                 # Detect potential training instability and issue warnings
                 warnings_issued = []
@@ -1521,6 +1613,11 @@ class UniZeroPolicy(MuZeroPolicy):
         # Convert to numpy array for the replay buffer, adding a small epsilon.
         value_priority_np = value_priority_tensor.detach().cpu().numpy() + 1e-6
         replay_log_dict = replay_distribution_metrics(weights, value_priority_tensor)
+        replay_log_dict.update(masked_replay_target_metrics(
+            target_reward[:, :batch_for_gpt['mask_padding'].shape[1]],
+            target_value[:, :batch_for_gpt['mask_padding'].shape[1]],
+            batch_for_gpt['mask_padding'],
+        ))
         logits_value = losses.intermediate_losses.get('logits_value')
         if logits_value is None:
             value_calibration_log_dict = {}
@@ -2236,6 +2333,7 @@ class UniZeroPolicy(MuZeroPolicy):
                     np.asarray(distributions),
                     self._collect_mcts_temperature,
                 )
+                predicted_value_scalar = float(np.asarray(pred_values[i]).reshape(-1)[0])
 
                 next_latent_state = next_latent_state_with_env[i][action]
 
@@ -2256,6 +2354,13 @@ class UniZeroPolicy(MuZeroPolicy):
                     'predicted_next_text': predicted_next,
                     'simulation/depth_mean': float(self._mcts_collect.last_search_depth_mean[i]),
                     'simulation/value_mean': float(value),
+                    'simulation/predicted_value_mean': predicted_value_scalar,
+                    'simulation/value_delta_mean': float(value - predicted_value_scalar),
+                    'simulation/value_abs_delta_mean': float(abs(value - predicted_value_scalar)),
+                    'simulation/depth_per_simulation': float(
+                        self._mcts_collect.last_search_depth_mean[i]
+                        / max(int(self._cfg.collect_num_simulations), 1)
+                    ),
                     'simulation/policy_entropy': float(visit_count_distribution_entropy),
                     **exploration_metrics,
                 }
@@ -2882,7 +2987,14 @@ class UniZeroPolicy(MuZeroPolicy):
             f'grad/{group}/global_norm_fraction' for group in gradient_groups
         )
 
-        core_metric_vars = list(DEFAULT_TB_METRIC_FILTER)
+        # Launchers may enable feature-aware metrics beyond the policy-wide compact
+        # defaults. Register every explicitly configured name so BaseLearner can emit it;
+        # the filter below still decides which learner series are actually written.
+        configured_metric_vars = (
+            [] if self is None
+            else list(dict(getattr(self._cfg, 'tb_metric_filter', {})))
+        )
+        core_metric_vars = list(DEFAULT_TB_METRIC_FILTER) + configured_metric_vars
 
         all_vars = (
             base_vars + norm_vars + head_clip_vars + enhanced_policy_vars

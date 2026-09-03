@@ -2,7 +2,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from lzero.worker.muzero_segment_collector import MuZeroSegmentCollector
+from lzero.worker.muzero_segment_collector import (
+    MuZeroSegmentCollector,
+    aggregate_episode_scalar_metrics,
+)
+
+
+@pytest.mark.unittest
+def test_aggregate_episode_scalar_metrics_keeps_simulation_diagnostics():
+    metrics = aggregate_episode_scalar_metrics([
+        {'simulation/depth_mean': 4., 'exploration/sample_entropy_nats': 1.0},
+        {'simulation/depth_mean': 6., 'exploration/sample_entropy_nats': 3.0},
+    ])
+
+    assert metrics['simulation/depth_mean'] == pytest.approx(5.)
+    assert metrics['exploration/sample_entropy_nats'] == pytest.approx(2.)
 
 
 @pytest.mark.unittest

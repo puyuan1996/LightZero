@@ -670,8 +670,18 @@ class MuZeroCollector(ISerialCollector):
                 # --- Episode Termination Handling ---
                 if done:
                     collected_episode += 1
+                    # Keep the legacy reward alias, but distinguish the
+                    # clipped life-level collector return from the raw value
+                    # exposed before ``ClipRewardWrapper``.
                     reward = info['eval_episode_return']
-                    log_info = {'reward': reward, 'time': self._env_info[env_id]['time'], 'step': self._env_info[env_id]['step']}
+                    raw_reward = info.get('raw_episode_return', reward)
+                    log_info = {
+                        'reward': reward,
+                        'collect/clipped_life_return': float(np.asarray(reward).mean()),
+                        'collect/raw_life_return': float(np.asarray(raw_reward).mean()),
+                        'time': self._env_info[env_id]['time'],
+                        'step': self._env_info[env_id]['step'],
+                    }
                     if not collect_with_pure_policy:
                         log_info['visit_entropy'] = visit_entropies_lst[env_id] / eps_steps_lst[env_id] if eps_steps_lst[env_id] > 0 else 0
                         if self.policy_config.gumbel_algo:
@@ -792,6 +802,12 @@ class MuZeroCollector(ISerialCollector):
                 'total_envstep_count': self._total_envstep_count,
                 'total_episode_count': self._total_episode_count,
                 'total_duration': self._total_duration,
+                'collect/clipped_life_return_mean': float(np.mean(
+                    [d.get('collect/clipped_life_return', d['reward']) for d in self._episode_info]
+                )),
+                'collect/raw_life_return_mean': float(np.mean(
+                    [d.get('collect/raw_life_return', d['reward']) for d in self._episode_info]
+                )),
             }
             
             if not self.collect_with_pure_policy:

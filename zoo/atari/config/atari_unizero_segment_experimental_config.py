@@ -1,6 +1,7 @@
 """UniZero Atari segment experiment launcher.
 
-Defaults reproduce the baseline arm of the 2026-08 MsPacman 3M matrix: no
+Defaults reproduce the current best arm of the 2026-09 MsPacman representation
+stability matrix: observation-loss weight 1, separate encoder clipping, no
 reanalysis, no prioritized replay, no augmentation, and the experimental
 mechanisms (raw-token KV rebuild, contextual value bootstrap, open-loop
 consistency loss) off. Pass ``--rebuild-kv-window-from-tokens
@@ -25,21 +26,182 @@ from zoo.atari.config.atari_env_action_space_map import atari_env_action_space_m
 
 _CORE_TB_METRIC_FILTER = {
     metric_name: True for metric_name in (
-        'loss/total', 'loss/policy', 'loss/value', 'loss/reward',
-        'priority/mean', 'priority/max', 'priority/valid_ratio',
-        'reanalyze/count', 'reanalyze/freq_actual', 'reanalyze/target_age_mean',
-        'simulation/depth_mean', 'simulation/value_mean', 'simulation/policy_entropy',
-        'segment/length_actual', 'segment/valid_ratio', 'segment/bootstrap_context_len',
-        'grad_norm', 'lr', 'param_norm', 'weight_decay',
-        'grad/clip_encoder_scale', 'grad/clip_non_encoder_scale',
-        'grad/encoder_pre_clip_norm', 'grad/non_encoder_pre_clip_norm',
-        'eval/mean_return', 'eval/max_return', 'eval/episode_length',
+        # Loss/target quality: all are populated by every standard UniZero update.
+        'loss/total', 'loss/obs', 'loss/policy', 'loss/policy_orig',
+        'loss/policy_entropy', 'loss/value', 'loss/reward',
+        'target/reward', 'target/value', 'target/policy_entropy',
+        'target/transformed_reward', 'target/transformed_value',
+
+        # Replay, segment validity, optimizer, and resource health.
+        'priority/value', 'priority/mean', 'priority/max', 'priority/valid_ratio',
+        'segment/length_actual', 'segment/valid_ratio',
+        'replay/value_priority_mean', 'replay/value_priority_std',
+        'replay/value_priority_min', 'replay/value_priority_max',
+        'replay/buffer_fill_fraction', 'replay/sample_age_fraction_mean',
+        'replay/sample_age_fraction_std', 'replay/sample_oldest_quarter_fraction',
+        'replay/sample_newest_quarter_fraction',
+        'replay/target_reward_mean', 'replay/target_reward_std',
+        'replay/target_reward_min', 'replay/target_reward_max',
+        'replay/target_reward_nonzero_fraction',
+        'replay/target_reward_positive_fraction',
+        'replay/target_value_mean', 'replay/target_value_std',
+        'replay/target_value_min', 'replay/target_value_max',
+        'lr', 'grad_norm', 'param_norm', 'weight_decay',
+        'grad/clip_threshold', 'grad/clip_applied', 'grad/clip_scale',
+        'grad/world_model_post_clip_norm',
+        'memory/current_gpu_gb', 'memory/max_gpu_gb',
+        'collect/epsilon', 'collect/mcts_temperature', 'schedule/policy_label_eps',
+
+        # Learning dynamics and value calibration used for plateau diagnosis.
+        'analysis/dormant_ratio_encoder', 'analysis/dormant_ratio_transformer',
+        'analysis/dormant_ratio_head', 'analysis/avg_weight_mag_encoder',
+        'analysis/avg_weight_mag_transformer', 'analysis/avg_weight_mag_head',
+        'analysis/e_rank_last_linear', 'analysis/e_rank_sim_norm',
+        'analysis/latent_state_l2_norms', 'analysis/latent_action_l2_norms',
+        'analysis/first_step_loss_value', 'analysis/first_step_loss_policy',
+        'analysis/first_step_loss_rewards', 'analysis/first_step_loss_obs',
+        'analysis/middle_step_loss_value', 'analysis/middle_step_loss_policy',
+        'analysis/middle_step_loss_rewards', 'analysis/middle_step_loss_obs',
+        'analysis/last_step_loss_value', 'analysis/last_step_loss_policy',
+        'analysis/last_step_loss_rewards', 'analysis/last_step_loss_obs',
+        'temperature_value', 'temperature_reward', 'temperature_policy',
+        'value_calibration/pred_mean', 'value_calibration/pred_std',
+        'value_calibration/target_mean', 'value_calibration/target_std',
+        'value_calibration/bias', 'value_calibration/mae',
+        'value_calibration/rmse', 'value_calibration/correlation',
+        'target/param_lag_l2', 'target/param_lag_relative',
+        'target/online_param_l2', 'target/ema_param_l2',
+        'target/latent_lag_l2_mean', 'target/latent_lag_relative_mean',
+        'target/latent_cosine_mean', 'target/latent_l2_mean',
+
+        # Periodic model/gradient/activation checks. They are absent between the start
+        # of training and their first scheduled calculation, rather than emitted as zero.
+        'norm/encoder/_total_norm', 'norm/transformer/_total_norm',
+        'norm/head_value/_total_norm', 'norm/head_reward/_total_norm',
+        'norm/head_policy/_total_norm', 'grad/encoder/_total_norm',
+        'grad/transformer/_total_norm', 'grad/action_embedding/_total_norm',
+        'grad/head_observation/_total_norm', 'grad/head_reward/_total_norm',
+        'grad/head_value/_total_norm', 'grad/head_policy/_total_norm',
+        'grad/encoder/global_norm_fraction', 'grad/transformer/global_norm_fraction',
+        'grad/action_embedding/global_norm_fraction',
+        'grad/head_observation/global_norm_fraction',
+        'grad/head_reward/global_norm_fraction', 'grad/head_value/global_norm_fraction',
+        'grad/head_policy/global_norm_fraction',
+        'norm/x_token/mean', 'norm/x_token/std', 'norm/x_token/max', 'norm/x_token/min',
+        'activation/x_token/feature_std_mean', 'activation/x_token/feature_std_min',
+        'activation/x_token/near_constant_fraction',
+        'logits/value/mean', 'logits/value/std', 'logits/value/max',
+        'logits/value/min', 'logits/value/abs_max',
+        'logits/policy/mean', 'logits/policy/std', 'logits/policy/max',
+        'logits/policy/min', 'logits/policy/abs_max',
+        'logits/reward/mean', 'logits/reward/std', 'logits/reward/max',
+        'logits/reward/min', 'logits/reward/abs_max',
+        'embeddings/obs/norm_mean', 'embeddings/obs/norm_std',
+        'embeddings/obs/norm_max', 'embeddings/obs/norm_min',
+        'stability/warning_count', 'stability/last_check_iter',
     )
 }
 
 
+def _build_learn_tb_metric_filter(
+        *, use_priority, reanalysis_enabled, bootstrap_value_context,
+        grad_clip_mode, adaptive_entropy_enabled, encoder_clip_enabled,
+        open_loop_diagnostic_freq, gradient_diagnostic_freq,
+        open_loop_consistency_weight, open_loop_recurrent_weight,
+):
+    """Return metrics that are genuinely produced by the resolved experiment.
+
+    Optional features often expose placeholder zeros in ``_forward_learn`` for API
+    compatibility.  Filter those feature families at configuration time; never filter
+    by the observed scalar value because zero can be a valid learning signal.
+    """
+    metric_filter = _CORE_TB_METRIC_FILTER.copy()
+
+    if use_priority:
+        metric_filter.update({name: True for name in (
+            'replay/is_weight_mean', 'replay/is_weight_std', 'replay/is_weight_min',
+            'replay/is_weight_max', 'replay/is_weight_ess_fraction',
+        )})
+    if reanalysis_enabled:
+        metric_filter.update({name: True for name in (
+            'reanalyze/count', 'reanalyze/freq_actual', 'reanalyze/target_age_mean',
+            'reanalyze/target_age_p50', 'reanalyze/target_age_p90',
+            'reanalyze/target_age_max', 'reanalyze/roots_refreshed',
+        )})
+    if bootstrap_value_context:
+        metric_filter['segment/bootstrap_context_len'] = True
+    if grad_clip_mode == 'separate_encoder':
+        metric_filter.update({name: True for name in (
+            'grad/clip_encoder_scale', 'grad/clip_non_encoder_scale',
+            'grad/encoder_pre_clip_norm', 'grad/non_encoder_pre_clip_norm',
+        )})
+    if adaptive_entropy_enabled:
+        metric_filter.update({name: True for name in (
+            'entropy/adaptive_alpha', 'entropy/target_ratio', 'entropy/alpha_loss',
+        )})
+    if encoder_clip_enabled:
+        metric_filter.update({name: True for name in (
+            'current_encoder_clip_value', 'stability/current_encoder_clip_value',
+            'encoder_clip/enabled', 'encoder_clip/applied', 'encoder_clip/apply_count',
+            'encoder_clip/scale_factor', 'encoder_clip/max_latent_norm',
+            'encoder_clip/threshold',
+        )})
+    if open_loop_consistency_weight > 0:
+        metric_filter['open_loop_consistency_loss'] = True
+    if open_loop_recurrent_weight > 0:
+        metric_filter.update({name: True for name in (
+            'open_loop_recurrent_loss', 'open_loop_recurrent_latent_loss',
+            'open_loop_recurrent_reward_loss', 'open_loop_recurrent_value_loss',
+            'open_loop_recurrent_policy_loss',
+        )})
+    if open_loop_diagnostic_freq > 0:
+        metric_filter.update({f'analysis/{name}': True for name in (
+            'open_loop_latent_mse_mean', 'open_loop_latent_mse_first',
+            'open_loop_latent_mse_middle', 'open_loop_latent_mse_last',
+            'rolling_teacher_latent_mse_mean', 'rolling_teacher_latent_mse_first',
+            'rolling_teacher_latent_mse_middle', 'rolling_teacher_latent_mse_last',
+            'teacher_forced_latent_mse_mean', 'teacher_forced_latent_mse_first',
+            'rolling_context_ratio', 'open_loop_exposure_ratio', 'open_loop_total_ratio',
+        )})
+    if gradient_diagnostic_freq > 0:
+        groups = (
+            'encoder', 'transformer', 'action_embedding', 'head_observation',
+            'head_reward', 'head_value', 'head_policy', '_tracked_total_norm',
+        )
+        metric_filter['grad_component/last_check_iter'] = True
+        metric_filter.update({
+            f'grad_component/{component}/{group}': True
+            for component in ('obs', 'reward', 'value', 'policy')
+            for group in groups
+        })
+    return metric_filter
+
+
 def _atari_game_name(env_id):
     return env_id.split('/')[-1].split('-')[0]
+
+
+def _validate_open_loop_requirements(
+        *, rebuild_kv_window_from_tokens, open_loop_diagnostic_freq,
+        open_loop_consistency_weight, open_loop_recurrent_weight,
+):
+    """Reject open-loop features that cannot reconstruct the required token history.
+
+    Failing during CLI/config construction avoids allocating environments and GPU
+    workers only to fail on the first scheduled diagnostic or auxiliary-loss batch.
+    """
+    requested = []
+    if open_loop_diagnostic_freq > 0:
+        requested.append('open-loop diagnostics')
+    if open_loop_consistency_weight > 0:
+        requested.append('open-loop consistency loss')
+    if open_loop_recurrent_weight > 0:
+        requested.append('open-loop recurrent loss')
+    if requested and not rebuild_kv_window_from_tokens:
+        raise ValueError(
+            f'{", ".join(requested)} require --rebuild-kv-window-from-tokens; '
+            'the legacy KV path cannot reconstruct aligned open-loop prefixes.'
+        )
 
 
 def _default_run_name(
@@ -48,7 +210,7 @@ def _default_run_name(
         replay_ratio, collect_temperature, obs_loss_weight, value_loss_weight,
         open_loop_consistency_weight, use_priority, use_augmentation,
         bootstrap_value_context, rebuild_kv_window_from_tokens, contextual_reanalysis,
-        buffer_reanalyze_freq, stab_fix, max_env_step,
+        buffer_reanalyze_freq, stab_fix, grad_clip_mode, max_env_step,
 ):
     """Build a self-describing run name from the resolved key config settings."""
     parts = [
@@ -62,6 +224,7 @@ def _default_run_name(
         f'obs{obs_loss_weight:g}',
         f'value{value_loss_weight:g}',
         'stabfix' if stab_fix else 'nostabfix',
+        f'clip-{grad_clip_mode}',
         'rebuildkv' if rebuild_kv_window_from_tokens else 'norebuildkv',
         'ctxreanalyze' if contextual_reanalysis else 'noctxreanalyze',
         f'reanalyze{buffer_reanalyze_freq:g}',
@@ -277,6 +440,7 @@ def main(
     use_augmentation = (
         False if use_augmentation_override is None else bool(use_augmentation_override)
     )
+    resolved_use_priority = False if use_priority is None else bool(use_priority)
     replay_ratio = 0.1 if replay_ratio_override is None else float(replay_ratio_override)
     if replay_ratio <= 0:
         raise ValueError(f'replay_ratio must be positive, got {replay_ratio}')
@@ -294,7 +458,9 @@ def main(
             'infer_context_length cannot exceed num_unroll_steps because the '
             f'transformer cache has only that many blocks: {infer_context_length_override} > {num_unroll_steps}'
         )
-    obs_loss_weight = 10.0 if obs_loss_weight_override is None else float(obs_loss_weight_override)
+    # The latest representation-stability matrix favors obs=1; keep it explicit
+    # and independently overridable for controlled ablations.
+    obs_loss_weight = 1.0 if obs_loss_weight_override is None else float(obs_loss_weight_override)
     # The historical config declared 0.25, but the historical code hard-coded an effective 0.5.
     # The v3 arm of the 2026-08 MsPacman matrix isolated this drift and won, so 0.5 is default.
     value_loss_weight = 0.5 if value_loss_weight_override is None else float(value_loss_weight_override)
@@ -319,7 +485,14 @@ def main(
     grad_clip_value = 5.0 if grad_clip_value_override is None else float(grad_clip_value_override)
     if grad_clip_value <= 0:
         raise ValueError(f'grad_clip_value must be positive, got {grad_clip_value}')
-    grad_clip_mode = _resolve_grad_clip_mode(use_augmentation, grad_clip_mode_override)
+    # Isolate encoder clipping by default even without augmentation.  The global
+    # clipping baseline remains available through --grad-clip-mode global.
+    resolved_grad_clip_mode_override = (
+        'separate_encoder' if grad_clip_mode_override is None else grad_clip_mode_override
+    )
+    grad_clip_mode = _resolve_grad_clip_mode(
+        use_augmentation, resolved_grad_clip_mode_override
+    )
     replay_buffer_size = (
         int(5e5) if replay_buffer_size_override is None
         else int(replay_buffer_size_override)
@@ -407,6 +580,18 @@ def main(
             encoder_clip_enabled=encoder_clip_enabled,
         )
     )
+    resolved_open_loop_consistency_weight = float(
+        world_model_experiment_overrides.get('open_loop_consistency_loss_weight', 0.0)
+    )
+    resolved_open_loop_recurrent_weight = float(
+        world_model_experiment_overrides.get('open_loop_recurrent_loss_weight', 0.0)
+    )
+    _validate_open_loop_requirements(
+        rebuild_kv_window_from_tokens=rebuild_kv_window_from_tokens,
+        open_loop_diagnostic_freq=open_loop_diagnostic_freq,
+        open_loop_consistency_weight=resolved_open_loop_consistency_weight,
+        open_loop_recurrent_weight=resolved_open_loop_recurrent_weight,
+    )
 
     num_simulations = 50
 
@@ -490,6 +675,12 @@ def main(
                     ),
                     num_simulations=num_simulations,
                     game_segment_length=game_segment_length,
+                    # Mirror learner loss weights so auxiliary recurrent
+                    # supervision cannot silently override the experiment.
+                    obs_loss_weight=obs_loss_weight,
+                    reward_loss_weight=1.0,
+                    value_loss_weight=value_loss_weight,
+                    policy_loss_weight=1.0,
                     device='cuda',
                     use_priority=True,
                     encoder_type='resnet',
@@ -561,7 +752,18 @@ def main(
             use_enhanced_policy_monitoring=bool(tb_log_all),
             log_metric=bool(log_metric),
             tb_log_all=bool(tb_log_all),
-            tb_metric_filter=_CORE_TB_METRIC_FILTER.copy(),
+            tb_metric_filter=_build_learn_tb_metric_filter(
+                use_priority=resolved_use_priority,
+                reanalysis_enabled=buffer_reanalyze_freq_override is not None,
+                bootstrap_value_context=bool(bootstrap_value_context),
+                grad_clip_mode=grad_clip_mode,
+                adaptive_entropy_enabled=not disable_adaptive_alpha,
+                encoder_clip_enabled=bool(encoder_clip_enabled),
+                open_loop_diagnostic_freq=open_loop_diagnostic_freq,
+                gradient_diagnostic_freq=gradient_diagnostic_freq,
+                open_loop_consistency_weight=resolved_open_loop_consistency_weight,
+                open_loop_recurrent_weight=resolved_open_loop_recurrent_weight,
+            ),
 
             # Priority settings.
             # Default OFF: uniform replay won the 2026-08 MsPacman 3M matrix (v3 arm).
@@ -569,7 +771,7 @@ def main(
             # always returns a shape-[B] value_priority diagnostic. Setting policy.use_priority
             # False here still gives uniform replay/IS weights; the buffer discards priority
             # write-backs. This is deliberate model-vs-buffer asymmetry, not a synchronized flag.
-            use_priority=False if use_priority is None else use_priority,
+            use_priority=resolved_use_priority,
             priority_prob_alpha=0.6,
             priority_prob_beta=0.4,
 
@@ -630,13 +832,14 @@ def main(
             obs_loss_weight=obs_loss_weight,
             value_loss_weight=value_loss_weight,
             open_loop_consistency_weight=open_loop_consistency_weight_override or 0,
-            use_priority=False if use_priority is None else use_priority,
+            use_priority=resolved_use_priority,
             use_augmentation=use_augmentation,
             bootstrap_value_context=bootstrap_value_context,
             rebuild_kv_window_from_tokens=rebuild_kv_window_from_tokens,
             contextual_reanalysis=contextual_reanalysis,
             buffer_reanalyze_freq=buffer_reanalyze_freq,
             stab_fix=stab_fix,
+            grad_clip_mode=grad_clip_mode,
             max_env_step=max_env_step,
         )
     run_name = _safe_run_name(run_name)
@@ -765,7 +968,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--grad-clip-mode', choices=('global', 'separate_encoder'), default=None,
-        help='Clipping topology; defaults to separate_encoder with augmentation and global otherwise.'
+        help='Clipping topology; defaults to separate_encoder (current best recipe).'
     )
     parser.add_argument(
         '--replay-buffer-size', dest='replay_buffer_size', type=int, default=None,
@@ -780,7 +983,7 @@ if __name__ == "__main__":
         help='Override learner unroll horizon (default 10; H5 is the faster MuZero-reference setting).'
     )
     parser.add_argument('--obs-loss-weight', type=float, default=None,
-                        help='Override observation reconstruction loss weight (default 10).')
+                        help='Override observation reconstruction loss weight (default 1).')
     parser.add_argument('--value-loss-weight', type=float, default=None,
                         help='Override value loss weight (default 0.5; the historical declared value was 0.25).')
     parser.add_argument('--root-cache-key-round-decimals', type=int, default=None,

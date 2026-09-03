@@ -1,6 +1,7 @@
 import copy
 import threading
 import time
+import zlib
 from collections import namedtuple
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -28,6 +29,37 @@ def balanced_episode_targets(env_num: int, n_episode: int) -> np.ndarray:
     targets = np.full(env_num, n_episode // env_num, dtype=np.int64)
     targets[:n_episode % env_num] += 1
     return targets
+
+
+def observation_checksum(observation: Any) -> int:
+    """Return a compact deterministic checksum for evaluator reset diagnostics."""
+    array = np.ascontiguousarray(to_ndarray(observation))
+    return int(zlib.crc32(array.view(np.uint8)))
+
+
+def update_action_checksum(checksum: int, action: Any) -> int:
+    """Incrementally fingerprint an action trajectory without storing every action."""
+    action_array = np.ascontiguousarray(np.asarray(action))
+    return int(zlib.crc32(action_array.view(np.uint8), int(checksum)))
+
+
+def evaluation_diversity_metrics(episode_signatures) -> Dict[str, float]:
+    """Detect duplicated deterministic evaluation trajectories across env slots."""
+    signatures = list(episode_signatures)
+    if not signatures:
+        return {}
+    trajectory_signatures = set(signatures)
+    initial_checksums = {signature[0] for signature in signatures}
+    action_checksums = {signature[1] for signature in signatures}
+    reward_length_signatures = {(signature[2], signature[3]) for signature in signatures}
+    count = len(signatures)
+    return {
+        'eval/unique_trajectory_ratio': len(trajectory_signatures) / count,
+        'eval/duplicate_trajectory_count': float(count - len(trajectory_signatures)),
+        'eval/unique_initial_observation_ratio': len(initial_checksums) / count,
+        'eval/unique_action_sequence_ratio': len(action_checksums) / count,
+        'eval/unique_reward_length_ratio': len(reward_length_signatures) / count,
+    }
 
 
 class MuZeroEvaluator(ISerialEvaluator):
@@ -295,6 +327,12 @@ class MuZeroEvaluator(ISerialEvaluator):
             target_episodes = balanced_episode_targets(env_nums, n_episode)
             completed_episodes = np.zeros(env_nums, dtype=np.int64)
             eps_steps_lst = np.zeros(env_nums)
+            initial_observation_checksums = {
+                env_id: observation_checksum(init_obs[env_id]['observation'])
+                for env_id in range(env_nums)
+            }
+            action_checksums = {env_id: 0 for env_id in range(env_nums)}
+            episode_signatures = []
             with self._timer:
                 while not eval_monitor.is_finished():
                     # Check if a timeout has occurred.
@@ -349,6 +387,9 @@ class MuZeroEvaluator(ISerialEvaluator):
 
                     for index, env_id in enumerate(ready_env_id_list):
                         actions[env_id] = actions_with_env_id.pop(env_id)
+                        action_checksums[env_id] = update_action_checksum(
+                            action_checksums[env_id], actions[env_id]
+                        )
                         distributions_dict[env_id] = distributions_dict_with_env_id.pop(env_id)
                         if self.policy_config.sampled_algo:
                             root_sampled_actions_dict[env_id] = root_sampled_actions_dict_with_env_id.pop(env_id)
@@ -389,6 +430,12 @@ class MuZeroEvaluator(ISerialEvaluator):
                                 saved_info.update(episode_timestep.info['episode_info'])
                             eval_monitor.update_info(env_id, saved_info)
                             eval_monitor.update_reward(env_id, reward)
+                            episode_signatures.append((
+                                initial_observation_checksums[env_id],
+                                action_checksums[env_id],
+                                int(eps_steps_lst[env_id]),
+                                float(np.asarray(reward).reshape(-1)[0]),
+                            ))
                             completed_episodes[env_id] += 1
                             self._logger.info(
                                 f"[EVALUATOR] env {env_id} finished episode, final reward: {eval_monitor.get_latest_reward(env_id)}, "
@@ -424,6 +471,10 @@ class MuZeroEvaluator(ISerialEvaluator):
                                 game_segments[env_id].reset(
                                     [init_obs[env_id]['observation'] for _ in range(self.policy_config.model.frame_stack_num)]
                                 )
+                                initial_observation_checksums[env_id] = observation_checksum(
+                                    init_obs[env_id]['observation']
+                                )
+                                action_checksums[env_id] = 0
                                 ready_env_id.add(env_id)
 
                             eps_steps_lst[env_id] = 0
@@ -450,7 +501,21 @@ class MuZeroEvaluator(ISerialEvaluator):
                 'eval/mean_return': np.mean(episode_return),
                 'eval/max_return': np.max(episode_return),
                 'eval/episode_length': envstep_count / n_episode if n_episode > 0 else 0,
+                # Explicitly state the evaluator metric's unit: raw ALE score
+                # over a complete game (episode_life=False, clip_rewards=False).
+                'eval/raw_full_episode_return_mean': float(np.mean(episode_return)),
+                'eval/raw_full_episode_return_max': float(np.max(episode_return)),
+                'eval/full_episode_length_mean': float(envstep_count / n_episode) if n_episode > 0 else 0.0,
             }
+            diversity_metrics = evaluation_diversity_metrics(episode_signatures)
+            info.update(diversity_metrics)
+            if diversity_metrics.get('eval/duplicate_trajectory_count', 0.) > 0:
+                self._logger.warning(
+                    'Evaluation produced %d duplicate trajectory signature(s) across %d episodes; '
+                    'check per-env reset seeds, ready-env mapping, and inference-cache isolation.',
+                    int(diversity_metrics['eval/duplicate_trajectory_count']),
+                    len(episode_signatures),
+                )
             episode_info = eval_monitor.get_episode_info()
             if episode_info is not None:
                 info.update(episode_info)

@@ -293,7 +293,10 @@ class TestPerSampleISWeights:
         assert all(component.requires_grad and torch.isfinite(component) for component in components)
         assert torch.allclose(
             recurrent_loss,
-            10. * components[0] + components[1] + 0.5 * components[2] + components[3],
+            world_model.obs_loss_weight * components[0]
+            + world_model.reward_loss_weight * components[1]
+            + world_model.value_loss_weight * components[2]
+            + world_model.policy_loss_weight * components[3],
         )
         policy_ce = losses.intermediate_losses['open_loop_recurrent_policy_ce']
         policy_entropy = losses.intermediate_losses['open_loop_recurrent_policy_entropy']
@@ -329,6 +332,39 @@ class TestPerSampleISWeights:
             allow_unused=False,
         )
         assert all(torch.isfinite(gradient).all() for gradient in gradients)
+
+    def test_open_loop_recurrent_loss_honors_configured_component_weights(self):
+        torch.manual_seed(31)
+        world_model = _build_world_model()
+        world_model.rebuild_kv_window_from_tokens = True
+        world_model.context_length = 6
+        world_model.open_loop_recurrent_loss_weight = 0.1
+        world_model.open_loop_consistency_batch_size = 2
+        world_model.open_loop_consistency_horizon = 3
+        world_model.obs_loss_weight = 1.0
+        world_model.reward_loss_weight = 0.75
+        world_model.value_loss_weight = 0.25
+        world_model.policy_loss_weight = 1.5
+        handle = InverseScalarTransform(DiscreteSupport(-50, 51, 1), True)
+
+        losses = world_model.compute_loss(
+            _make_batch(torch.ones(B, T, dtype=torch.bool)),
+            world_model.tokenizer,
+            handle,
+            global_step=1,
+        )
+        recurrent_loss = losses.intermediate_losses['open_loop_recurrent_loss']
+        expected = (
+            world_model.obs_loss_weight
+            * losses.intermediate_losses['open_loop_recurrent_latent_loss']
+            + world_model.reward_loss_weight
+            * losses.intermediate_losses['open_loop_recurrent_reward_loss']
+            + world_model.value_loss_weight
+            * losses.intermediate_losses['open_loop_recurrent_value_loss']
+            + world_model.policy_loss_weight
+            * losses.intermediate_losses['open_loop_recurrent_policy_loss']
+        )
+        assert torch.allclose(recurrent_loss, expected)
 
     def test_adaptive_entropy_reweights_open_loop_recurrent_policy_component(self):
         recurrent_loss = torch.tensor(13.0)

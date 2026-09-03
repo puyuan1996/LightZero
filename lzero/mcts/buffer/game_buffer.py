@@ -68,6 +68,9 @@ class GameBuffer(ABC, object):
 
         self._latest_reanalysis_diagnostics = {
             'reanalyze/target_age_mean': 0.0,
+            'reanalyze/target_age_p50': 0.0,
+            'reanalyze/target_age_p90': 0.0,
+            'reanalyze/target_age_max': 0.0,
             'reanalyze/roots_refreshed': 0.0,
         }
 
@@ -432,10 +435,12 @@ class GameBuffer(ABC, object):
             make_time = [0. for _ in range(len(batch_index_list))]
 
             orig_data = (game_segment_list, pos_in_game_segment_list, batch_index_list, [], make_time)
+            target_ages = np.asarray(sampled_target_ages, dtype=np.float64)
             self._latest_reanalysis_diagnostics = {
-                'reanalyze/target_age_mean': (
-                    float(np.mean(sampled_target_ages)) if sampled_target_ages else 0.0
-                ),
+                'reanalyze/target_age_mean': float(target_ages.mean()) if target_ages.size else 0.0,
+                'reanalyze/target_age_p50': float(np.quantile(target_ages, 0.5)) if target_ages.size else 0.0,
+                'reanalyze/target_age_p90': float(np.quantile(target_ages, 0.9)) if target_ages.size else 0.0,
+                'reanalyze/target_age_max': float(target_ages.max()) if target_ages.size else 0.0,
                 'reanalyze/roots_refreshed': float(len(batch_index_list)),
             }
             return orig_data

@@ -579,6 +579,13 @@ class WorldModel(
     def _initialize_config_parameters(self) -> None:
         """Initialize configuration parameters."""
         self.policy_entropy_weight = self.config.policy_entropy_weight
+        # Keep the component weights on the world model so auxiliary objectives
+        # (notably the open-loop recurrent rollout) use the same semantics as
+        # the main MuZero loss.  These fallbacks preserve legacy configs.
+        self.obs_loss_weight = float(getattr(self.config, 'obs_loss_weight', 10.0))
+        self.reward_loss_weight = float(getattr(self.config, 'reward_loss_weight', 1.0))
+        self.value_loss_weight = float(getattr(self.config, 'value_loss_weight', 0.5))
+        self.policy_loss_weight = float(getattr(self.config, 'policy_loss_weight', 1.0))
         self.predict_latent_loss_type = self.config.predict_latent_loss_type
         self.group_size = self.config.group_size
         self.num_groups = self.config.embed_dim // self.group_size
@@ -2891,6 +2898,7 @@ class WorldModel(
         # Add encoder output to return dictionary for external training loop access
         # Using .detach() because this tensor is only used for subsequent clip operations and should not affect gradient computation
         detached_obs_embeddings = obs_embeddings.detach()
+        detached_target_obs_embeddings = target_obs_embeddings.detach()
 
         if self.continuous_action_space:
             return LossWithIntermediateLosses(
@@ -2934,6 +2942,7 @@ class WorldModel(
                 value_priority=value_priority,
                 intermediate_tensor_x=intermediate_tensor_x,
                 obs_embeddings=detached_obs_embeddings,
+                target_obs_embeddings=detached_target_obs_embeddings,
                 logits_value=outputs.logits_value.detach(), 
                 logits_reward=outputs.logits_rewards.detach(),
                 logits_policy=outputs.logits_policy.detach(),
@@ -2977,6 +2986,7 @@ class WorldModel(
                 value_priority=value_priority,
                 intermediate_tensor_x=intermediate_tensor_x,
                 obs_embeddings=detached_obs_embeddings,
+                target_obs_embeddings=detached_target_obs_embeddings,
                 logits_value=outputs.logits_value.detach(),
                 logits_reward=outputs.logits_rewards.detach(),
                 logits_policy=outputs.logits_policy.detach(),

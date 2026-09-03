@@ -181,4 +181,7 @@ class TestSampleOrigDataIndexAlignment:
 
         assert len(segments) == len(positions) == len(indices) == 7
         assert all(position < 5 for position in positions)
-        assert buf._latest_reanalysis_diagnostics['reanalyze/target_age_mean'] > 0
+        diagnostics = buf._latest_reanalysis_diagnostics
+        assert diagnostics['reanalyze/target_age_mean'] > 0
+        assert diagnostics['reanalyze/target_age_p50'] <= diagnostics['reanalyze/target_age_p90']
+        assert diagnostics['reanalyze/target_age_p90'] <= diagnostics['reanalyze/target_age_max']

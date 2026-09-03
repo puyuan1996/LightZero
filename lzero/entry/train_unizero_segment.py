@@ -29,7 +29,12 @@ _PERIODIC_CHECKPOINT_PATTERN = re.compile(r'^iteration_(\d+)\.pth\.tar$')
 
 
 class _MetricFilteredWriter:
-    """Filter scalar writes by canonical metric name while preserving the writer API."""
+    """Filter learner scalars while preserving collector/evaluator telemetry.
+
+    ``tb_metric_filter`` describes the learner's metric surface.  Applying it to the
+    shared writer globally also hides DI-engine's collector/evaluator summaries,
+    whose names are intentionally independent from learner metrics.
+    """
 
     def __init__(self, writer, enabled: bool, metric_filter: Dict[str, bool], log_all: bool) -> None:
         self._writer = writer
@@ -45,9 +50,28 @@ class _MetricFilteredWriter:
         name = tag.split('/', 1)[1] if '/' in tag else tag
         return name[:-4] if name.endswith('_avg') else name
 
+    @staticmethod
+    def _is_learner_tag(tag: str) -> bool:
+        namespace = tag.split('/', 1)[0]
+        return (
+            namespace == 'learner_iter'
+            or namespace == 'learner_step'
+            or namespace.startswith('learner_iter_')
+            or namespace.startswith('learner_step_')
+        )
+
     def add_scalar(self, tag, scalar_value, global_step=None, *args, **kwargs):
-        metric_name = self._canonical_name(str(tag))
-        if self._enabled and (self._log_all or self._metric_filter.get(metric_name, False)):
+        tag = str(tag)
+        metric_name = self._canonical_name(tag)
+        should_log = (
+            self._enabled
+            and (
+                self._log_all
+                or not self._is_learner_tag(tag)
+                or self._metric_filter.get(metric_name, False)
+            )
+        )
+        if should_log:
             return self._writer.add_scalar(tag, scalar_value, global_step, *args, **kwargs)
         return None
 
@@ -374,6 +398,9 @@ def train_unizero_segment(
     reanalyze_epoch_budget = 0.0
     latest_reanalysis_diagnostics = {
         'reanalyze/target_age_mean': 0.0,
+        'reanalyze/target_age_p50': 0.0,
+        'reanalyze/target_age_p90': 0.0,
+        'reanalyze/target_age_max': 0.0,
         'reanalyze/roots_refreshed': 0.0,
     }
     last_evaluated_train_iter = None

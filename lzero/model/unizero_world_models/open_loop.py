@@ -533,10 +533,14 @@ class OpenLoopWorldModelMixin:
             'policy_ce': policy_ce_mean,
             'policy_entropy': policy_entropy_mean,
         }
+        # Reuse the configured component weights.  The previous hard-coded
+        # ``10/.5/1/1`` coefficients made a configured observation weight of
+        # 1.0 behave as 10.0 inside the recurrent auxiliary objective, i.e.
+        # a ten-fold stronger latent gradient than requested.
         total = (
-            10. * components['latent']
-            + components['reward']
-            + 0.5 * components['value']
-            + components['policy']
+            self.obs_loss_weight * components['latent']
+            + self.reward_loss_weight * components['reward']
+            + self.value_loss_weight * components['value']
+            + self.policy_loss_weight * components['policy']
         )
         return total, components

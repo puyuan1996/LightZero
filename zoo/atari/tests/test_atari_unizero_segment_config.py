@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 import pytest
+import torch
 
 from zoo.atari.config import (
     atari_unizero_segment_config,
@@ -9,6 +12,38 @@ from zoo.atari.config import (
 def _unizero_policy():
     from lzero.policy.unizero import UniZeroPolicy
     return UniZeroPolicy
+
+
+def test_replay_target_and_target_lag_diagnostics_are_mask_aware():
+    from lzero.policy.unizero import (
+        masked_replay_target_metrics,
+        target_latent_lag_metrics,
+        target_parameter_lag_metrics,
+    )
+
+    rewards = torch.tensor([[0., 1., 99.], [2., 0., 99.]])
+    values = torch.tensor([[1., 3., 99.], [5., 7., 99.]])
+    mask = torch.tensor([[True, True, False], [True, True, False]])
+    replay_metrics = masked_replay_target_metrics(rewards, values, mask)
+    assert replay_metrics['replay/target_reward_mean'] == pytest.approx(0.75)
+    assert replay_metrics['replay/target_reward_nonzero_fraction'] == pytest.approx(0.5)
+    assert replay_metrics['replay/target_value_max'] == pytest.approx(7.0)
+
+    online = torch.nn.Linear(2, 2, bias=False)
+    target = torch.nn.Linear(2, 2, bias=False)
+    with torch.no_grad():
+        online.weight.fill_(2.)
+        target.weight.fill_(1.)
+    parameter_metrics = target_parameter_lag_metrics(online, target)
+    assert parameter_metrics['target/param_lag_l2'] == pytest.approx(2.0)
+    assert parameter_metrics['target/param_lag_relative'] == pytest.approx(0.5)
+
+    latent_metrics = target_latent_lag_metrics(
+        torch.tensor([[[2., 0.], [0., 2.]]]),
+        torch.tensor([[[1., 0.], [0., 1.]]]),
+    )
+    assert latent_metrics['target/latent_lag_l2_mean'] == pytest.approx(1.0)
+    assert latent_metrics['target/latent_cosine_mean'] == pytest.approx(1.0)
 
 
 def test_stable_segment_config_is_the_best_mspacman_recipe_without_experimental_features():
@@ -32,13 +67,13 @@ def test_stable_segment_config_is_the_best_mspacman_recipe_without_experimental_
     assert policy_config.evaluator_env_num == 3
     assert policy_config.eval_freq == int(1e4)
     assert policy_config.fixed_temperature_value == 0.25
-    assert policy_config.obs_loss_weight == 10.0
+    assert policy_config.obs_loss_weight == 1.0
     assert policy_config.value_loss_weight == 0.5
     assert policy_config.use_priority is False
     assert policy_config.use_augmentation is False
-    assert policy_config.grad_clip_mode == 'global'
+    assert policy_config.grad_clip_mode == 'separate_encoder'
     assert config.exp_name.endswith(
-        '_stabfix_norebuildkv_noctxreanalyze_reanalyze2e-10_'
+        '_stabfix_clip-separate_encoder_norebuildkv_noctxreanalyze_reanalyze2e-10_'
         'nobootctx_olc0_noper_noaug_seed0_3m'
     )
     assert policy_config.use_adaptive_entropy_weight is False
@@ -85,7 +120,7 @@ def test_stable_segment_config_resolves_fixed_augmentation_and_unique_run_name()
     assert config.policy.augmentation == ['shift', 'intensity']
     assert config.policy.grad_clip_mode == 'separate_encoder'
     assert config.exp_name.endswith(
-        '_stabfix_norebuildkv_noctxreanalyze_reanalyze2e-10_'
+        '_stabfix_clip-separate_encoder_norebuildkv_noctxreanalyze_reanalyze2e-10_'
         'nobootctx_olc0_noper_fixed-aug_seed0_3m'
     )
 
@@ -147,10 +182,11 @@ def test_experimental_default_run_name_records_resolved_training_features():
         contextual_reanalysis=True,
         buffer_reanalyze_freq=0.02,
         stab_fix=True,
+        grad_clip_mode='separate_encoder',
         max_env_step=500000,
     )
 
-    assert '_stabfix_rebuildkv_ctxreanalyze_reanalyze0.02_' in run_name
+    assert '_stabfix_clip-separate_encoder_rebuildkv_ctxreanalyze_reanalyze0.02_' in run_name
     assert '_nobootctx_olc0_noper_noaug_' in run_name
     assert run_name.endswith('_seed0_0.5m_20260828_120000')
 
@@ -188,10 +224,80 @@ def test_experimental_defaults_use_fast_sparse_evaluation(monkeypatch, tmp_path)
     )
 
     config = captured['config']
+    assert config.policy.obs_loss_weight == 1.0
+    assert config.policy.grad_clip_mode == 'separate_encoder'
     assert config.env.evaluator_env_num == 3
     assert config.env.n_evaluator_episode == 3
     assert config.policy.evaluator_env_num == 3
     assert config.policy.eval_freq == int(1e4)
+
+
+def test_experimental_default_learn_metrics_keep_signals_not_disabled_placeholders():
+    build_filter = atari_unizero_segment_experimental_config._build_learn_tb_metric_filter
+    metric_filter = build_filter(
+        use_priority=False,
+        reanalysis_enabled=False,
+        bootstrap_value_context=False,
+        grad_clip_mode='global',
+        adaptive_entropy_enabled=False,
+        encoder_clip_enabled=False,
+        open_loop_diagnostic_freq=0,
+        gradient_diagnostic_freq=0,
+        open_loop_consistency_weight=0.0,
+        open_loop_recurrent_weight=0.0,
+    )
+
+    assert {
+        'loss/total',
+        'loss/obs',
+        'analysis/first_step_loss_value',
+        'activation/x_token/feature_std_mean',
+        'replay/sample_age_fraction_mean',
+        'replay/target_reward_nonzero_fraction',
+        'value_calibration/bias',
+        'target/param_lag_relative',
+        'target/latent_cosine_mean',
+        'grad/clip_scale',
+        'segment/valid_ratio',
+    } <= set(metric_filter)
+    assert {
+        'reanalyze/count',
+        'segment/bootstrap_context_len',
+        'replay/is_weight_std',
+        'open_loop_consistency_loss',
+        'encoder_clip/applied',
+        'entropy/adaptive_alpha',
+        'grad_component/value/encoder',
+    }.isdisjoint(metric_filter)
+
+
+def test_experimental_learn_metrics_follow_enabled_feature_families():
+    metric_filter = atari_unizero_segment_experimental_config._build_learn_tb_metric_filter(
+        use_priority=True,
+        reanalysis_enabled=True,
+        bootstrap_value_context=True,
+        grad_clip_mode='separate_encoder',
+        adaptive_entropy_enabled=True,
+        encoder_clip_enabled=True,
+        open_loop_diagnostic_freq=100,
+        gradient_diagnostic_freq=200,
+        open_loop_consistency_weight=1.0,
+        open_loop_recurrent_weight=0.0,
+    )
+
+    assert {
+        'reanalyze/target_age_mean',
+        'reanalyze/target_age_p90',
+        'segment/bootstrap_context_len',
+        'replay/is_weight_ess_fraction',
+        'grad/encoder_pre_clip_norm',
+        'entropy/adaptive_alpha',
+        'encoder_clip/applied',
+        'open_loop_consistency_loss',
+        'analysis/open_loop_latent_mse_mean',
+        'grad_component/value/encoder',
+    } <= set(metric_filter)
+    assert 'open_loop_recurrent_loss' not in metric_filter
 
 
 def test_experimental_auto_name_tracks_implicit_contextual_reanalysis(monkeypatch, tmp_path):
@@ -225,7 +331,7 @@ def test_experimental_auto_name_tracks_implicit_contextual_reanalysis(monkeypatc
     assert config.policy.buffer_reanalyze_freq == 0.02
     assert config.policy.model.world_model_cfg.open_loop_consistency_loss_weight == 0.0
     assert (
-        '_stabfix_rebuildkv_ctxreanalyze_reanalyze0.02_'
+        '_stabfix_clip-separate_encoder_rebuildkv_ctxreanalyze_reanalyze0.02_'
         'nobootctx_olc0_noper_noaug_' in config.exp_name
     )
 
@@ -272,6 +378,19 @@ def test_optimization_diagnostics_are_registered_for_tensorboard():
         'grad_component/value/encoder',
         'grad_component/policy/head_policy',
     } <= monitor_vars
+
+
+def test_configured_learner_metric_is_registered_and_selected():
+    UniZeroPolicy = _unizero_policy()
+    policy = SimpleNamespace(
+        _cfg=SimpleNamespace(
+            log_metric=True,
+            tb_log_all=False,
+            tb_metric_filter={'custom/feature_metric': True},
+        ),
+        use_head_clip=False,
+    )
+    assert UniZeroPolicy._monitor_vars_learn(policy) == ['custom/feature_metric']
 
 
 def test_atari_experimental_overrides_are_sparse_and_explicit():
@@ -338,3 +457,26 @@ def test_explicit_encoder_clip_disable_sets_both_projection_owners():
 def test_experimental_override_validation(kwargs, message):
     with pytest.raises(ValueError, match=message):
         atari_unizero_segment_experimental_config._experimental_config_overrides(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ('feature_overrides', 'feature_name'),
+    [
+        ({'open_loop_diagnostic_freq': 1000}, 'open-loop diagnostics'),
+        ({'open_loop_consistency_weight': 0.1}, 'open-loop consistency loss'),
+        ({'open_loop_recurrent_weight': 0.1}, 'open-loop recurrent loss'),
+    ],
+)
+def test_open_loop_features_require_rebuilt_kv_window(feature_overrides, feature_name):
+    kwargs = dict(
+        rebuild_kv_window_from_tokens=False,
+        open_loop_diagnostic_freq=0,
+        open_loop_consistency_weight=0.0,
+        open_loop_recurrent_weight=0.0,
+    )
+    kwargs.update(feature_overrides)
+    with pytest.raises(ValueError, match=feature_name):
+        atari_unizero_segment_experimental_config._validate_open_loop_requirements(**kwargs)
+
+    kwargs['rebuild_kv_window_from_tokens'] = True
+    atari_unizero_segment_experimental_config._validate_open_loop_requirements(**kwargs)

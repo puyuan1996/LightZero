@@ -1,5 +1,9 @@
 import pytest
-from zoo.atari.envs.atari_lightzero_env import AtariEnvLightZero
+import numpy as np
+import gym
+
+from zoo.atari.envs.atari_lightzero_env import AtariEnvLightZero, atari_episode_diagnostics
+from zoo.atari.envs.atari_wrappers import RawRewardInfoWrapper
 from easydict import EasyDict
 
 config = EasyDict(dict(
@@ -27,6 +31,42 @@ config = EasyDict(dict(
 ))
 
 config.max_episode_steps = config.eval_max_episode_steps
+
+
+def test_atari_episode_diagnostics_reports_termination_and_configured_metadata():
+    cfg = EasyDict(episode_diagnostic_info_keys=['lives', 'room', 'ignored'])
+    metrics = atari_episode_diagnostics(
+        {'TimeLimit.truncated': True, 'lives': 2, 'room': 7, 'ignored': 'text'},
+        cfg,
+        episode_length=123,
+    )
+    assert metrics == {
+        'episode/terminated_by_time_limit': 1.0,
+        'episode/natural_termination': 0.0,
+        'episode/final_length': 123.0,
+        'atari/lives': 2.0,
+        'atari/room': 7.0,
+    }
+
+
+def test_raw_reward_info_wrapper_preserves_reward_and_records_raw_value():
+    class DummyEnv(gym.Env):
+        observation_space = gym.spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+        action_space = gym.spaces.Discrete(2)
+
+        def step(self, action):
+            return np.zeros(1), 7.5, False, {'existing': 1}
+
+        def reset(self, **kwargs):
+            return np.zeros(1)
+
+    wrapped = RawRewardInfoWrapper(DummyEnv())
+    observation, reward, done, info = wrapped.step(0)
+
+    assert reward == 7.5
+    assert done is False
+    assert info['existing'] == 1
+    assert np.asarray(info['raw_reward']).item() == 7.5
 
 @pytest.mark.envtest
 class TestAtariEnvLightZero:

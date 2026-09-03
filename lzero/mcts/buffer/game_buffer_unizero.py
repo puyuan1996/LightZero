@@ -473,6 +473,9 @@ class UniZeroGameBuffer(MuZeroGameBuffer):
             self._compute_target_policy_reanalyzed(policy_re_context, policy._target_model, current_batch[1])
             return dict(getattr(self, '_latest_reanalysis_diagnostics', {
                 'reanalyze/target_age_mean': 0.0,
+                'reanalyze/target_age_p50': 0.0,
+                'reanalyze/target_age_p90': 0.0,
+                'reanalyze/target_age_max': 0.0,
                 'reanalyze/roots_refreshed': 0.0,
             }))
         finally:

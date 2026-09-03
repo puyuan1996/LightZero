@@ -16,6 +16,27 @@ from lzero.mcts.buffer.game_segment import GameSegment
 from lzero.mcts.utils import prepare_observation
 
 
+def aggregate_episode_scalar_metrics(episode_info: List[Dict[str, Any]]) -> Dict[str, float]:
+    """Average scalar per-episode diagnostics before writing collector telemetry.
+
+    MCTS diagnostics are stored under ``simulation/`` on each episode record,
+    alongside exploration and environment diagnostics.  Keeping the aggregation
+    prefix list in one helper prevents valid metrics from being silently dropped
+    when the collector flushes its episode buffer.
+    """
+    if not episode_info:
+        return {}
+    prefixes = ('simulation/', 'exploration/', 'episode/', 'atari/')
+    metric_names = {
+        key for episode in episode_info for key in episode
+        if key.startswith(prefixes)
+    }
+    return {
+        key: float(np.mean([episode.get(key, 0.) for episode in episode_info]))
+        for key in metric_names
+    }
+
+
 @SERIAL_COLLECTOR_REGISTRY.register('segment_muzero')
 class MuZeroSegmentCollector(ISerialCollector):
     """
@@ -436,6 +457,10 @@ class MuZeroSegmentCollector(ISerialCollector):
         exploration_metric_names = (
             'simulation/depth_mean',
             'simulation/value_mean',
+            'simulation/predicted_value_mean',
+            'simulation/value_delta_mean',
+            'simulation/value_abs_delta_mean',
+            'simulation/depth_per_simulation',
             'simulation/policy_entropy',
             'exploration/prior_entropy_nats',
             'exploration/prior_effective_actions',
@@ -647,11 +672,22 @@ class MuZeroSegmentCollector(ISerialCollector):
                     self._logger.info(f'======== Environment {env_id} episode finished! ========')
                     self._total_episode_count += 1
 
+                    # ``eval_episode_return`` is a legacy field.  In Atari
+                    # collection it is a clipped, life-level return, while
+                    # evaluator episodes use raw full-game rewards.  Keep the
+                    # old ``reward`` field for compatibility and add explicit
+                    # names for telemetry consumers.
+                    clipped_return = episode_timestep.info['eval_episode_return']
+                    raw_return = episode_timestep.info.get('raw_episode_return', clipped_return)
                     info = {
-                        'reward': episode_timestep.info['eval_episode_return'],
+                        'reward': clipped_return,
+                        'collect/clipped_life_return': float(np.asarray(clipped_return).mean()),
+                        'collect/raw_life_return': float(np.asarray(raw_return).mean()),
                         'time': self._env_info[env_id]['time'],
                         'step': self._env_info[env_id]['step'],
                     }
+                    if 'episode_info' in episode_timestep.info:
+                        info.update(episode_timestep.info['episode_info'])
                     if not collect_with_pure_policy:
                         info['visit_entropy'] = visit_entropies_lst[env_id] / eps_steps_lst[env_id] if eps_steps_lst[env_id] > 0 else 0
                         for metric_name in exploration_metric_names:
@@ -781,14 +817,14 @@ class MuZeroSegmentCollector(ISerialCollector):
                 'total_episode_count': self._total_episode_count,
                 'total_duration': self._total_duration,
                 'visit_entropy_mean': np.mean(visit_entropy),
+                'collect/clipped_life_return_mean': float(np.mean(
+                    [d.get('collect/clipped_life_return', d['reward']) for d in self._episode_info]
+                )),
+                'collect/raw_life_return_mean': float(np.mean(
+                    [d.get('collect/raw_life_return', d['reward']) for d in self._episode_info]
+                )),
             }
-            for metric_name in (
-                    key for key in self._episode_info[0]
-                    if key.startswith('exploration/')
-            ):
-                info[metric_name] = np.mean([
-                    episode.get(metric_name, 0.) for episode in self._episode_info
-                ])
+            info.update(aggregate_episode_scalar_metrics(self._episode_info))
             if self.policy_config.gumbel_algo:
                 completed_value = [d.get('completed_value', 0.0) for d in self._episode_info]
                 info['completed_value_mean'] = np.mean(completed_value)
