@@ -204,6 +204,23 @@ def _validate_open_loop_requirements(
         )
 
 
+def _validate_reanalysis_context(*, buffer_reanalyze_freq_override, contextual_reanalysis):
+    """Keep reanalysis frequency and target-context topology explicit.
+
+    ``None`` means "use the config default".  Any numeric override is an
+    explicit request for replay refresh and must opt into the information-state
+    aligned implementation.  Rejecting the ambiguous combination is safer than
+    silently mutating a baseline (or silently using the legacy, misaligned
+    target path).
+    """
+    if buffer_reanalyze_freq_override is not None and not contextual_reanalysis:
+        raise ValueError(
+            'Explicit buffer_reanalyze_freq requires --contextual-reanalysis. '
+            'Omit --buffer-reanalyze-freq for the no-reanalysis baseline; '
+            'do not pass the historical 2e-10 sentinel explicitly.'
+        )
+
+
 def _default_run_name(
         game_name, seed, timestamp, *,
         num_unroll_steps, infer_context_length, game_segment_length, batch_size,
@@ -561,19 +578,10 @@ def main(
         open_loop_prefix_transitions_override = 3
     if legacy_resume_alpha is not None and legacy_resume_alpha <= 0:
         raise ValueError(f'legacy_resume_alpha must be positive, got {legacy_resume_alpha}')
-    if buffer_reanalyze_freq_override is not None and not contextual_reanalysis:
-        # Do not silently change the experiment topology.  In particular,
-        # passing the historical ``2e-10`` sentinel used to turn an otherwise
-        # clean baseline into a contextual-reanalysis run.  Reanalysis targets
-        # are only information-state aligned on the contextual path, so an
-        # explicit frequency must be paired with an explicit opt-in.  The
-        # default (override=None) remains the tiny legacy frequency with no
-        # reanalysis events and no contextual history.
-        raise ValueError(
-            'Explicit buffer_reanalyze_freq requires --contextual-reanalysis. '
-            'Omit --buffer-reanalyze-freq for the no-reanalysis baseline; '
-            'do not pass the historical 2e-10 sentinel explicitly.'
-        )
+    _validate_reanalysis_context(
+        buffer_reanalyze_freq_override=buffer_reanalyze_freq_override,
+        contextual_reanalysis=contextual_reanalysis,
+    )
 
     policy_experiment_overrides, world_model_experiment_overrides = (
         _experimental_config_overrides(
