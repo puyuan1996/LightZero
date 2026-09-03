@@ -300,7 +300,23 @@ def test_experimental_learn_metrics_follow_enabled_feature_families():
     assert 'open_loop_recurrent_loss' not in metric_filter
 
 
-def test_experimental_auto_name_tracks_implicit_contextual_reanalysis(monkeypatch, tmp_path):
+def test_experimental_reanalysis_requires_explicit_contextual_opt_in():
+    with pytest.raises(ValueError, match='requires --contextual-reanalysis'):
+        atari_unizero_segment_experimental_config.main(
+            env_id='ALE/Pong-v5',
+            seed=0,
+            max_env_step_override=500000,
+            stab_fix=True,
+            rebuild_kv_window_from_tokens=True,
+            bootstrap_value_context=False,
+            buffer_reanalyze_freq_override=0.02,
+            open_loop_consistency_weight_override=0.0,
+            use_priority=False,
+            use_augmentation_override=False,
+        )
+
+
+def test_experimental_reanalysis_name_tracks_explicit_contextual_opt_in(monkeypatch, tmp_path):
     import lzero.entry
 
     captured = {}
@@ -316,6 +332,7 @@ def test_experimental_auto_name_tracks_implicit_contextual_reanalysis(monkeypatc
         max_env_step_override=500000,
         stab_fix=True,
         rebuild_kv_window_from_tokens=True,
+        contextual_reanalysis=True,
         bootstrap_value_context=False,
         buffer_reanalyze_freq_override=0.02,
         open_loop_consistency_weight_override=0.0,
