@@ -5,6 +5,7 @@ import pytest
 from lzero.worker.muzero_segment_collector import (
     MuZeroSegmentCollector,
     aggregate_episode_scalar_metrics,
+    reset_observation_window,
 )
 
 
@@ -17,6 +18,17 @@ def test_aggregate_episode_scalar_metrics_keeps_simulation_diagnostics():
 
     assert metrics['simulation/depth_mean'] == pytest.approx(5.)
     assert metrics['exploration/sample_entropy_nats'] == pytest.approx(2.)
+
+
+@pytest.mark.unittest
+def test_reset_observation_window_discards_terminal_frame():
+    import numpy as np
+    from collections import deque
+
+    window = deque([np.array([9]), np.array([9])], maxlen=2)
+    reset_observation_window(window, np.array([3]), 2)
+    assert len(window) == 2
+    assert all(np.array_equal(frame, np.array([3])) for frame in window)
 
 
 @pytest.mark.unittest

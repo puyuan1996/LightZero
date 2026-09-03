@@ -7,6 +7,7 @@ from lzero.mcts.buffer.game_buffer_efficientzero import EfficientZeroGameBuffer
 from lzero.mcts.buffer.game_buffer_muzero import MuZeroGameBuffer
 from lzero.mcts.buffer.game_buffer_sampled_efficientzero import SampledEfficientZeroGameBuffer
 from lzero.mcts.buffer.game_buffer_sampled_muzero import SampledMuZeroGameBuffer
+from lzero.mcts.buffer.game_buffer_unizero import _build_segment_validity_mask
 
 config = EasyDict(
     dict(
@@ -26,6 +27,13 @@ config = EasyDict(
         ),
     )
 )
+
+
+@pytest.mark.unittest
+def test_unizero_validity_mask_keeps_root_plus_h_recurrent_states():
+    assert _build_segment_validity_mask(10, 200, 0).tolist() == [1.0] * 11
+    assert _build_segment_validity_mask(10, 200, 190).tolist() == [1.0] * 10 + [0.0]
+    assert _build_segment_validity_mask(10, 200, 199).tolist() == [1.0] + [0.0] * 10
 
 
 def _make_varied_action_config(action_space_size=100, num_of_sampled_actions=3):

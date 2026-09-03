@@ -16,6 +16,28 @@ if TYPE_CHECKING:
 from line_profiler import line_profiler
 
 
+def _build_segment_validity_mask(num_unroll_steps: int, game_segment_length: int,
+                                 position: int) -> np.ndarray:
+    """Build the root+H validity mask used by UniZero replay batches.
+
+    A UniZero forward pass emits one root prediction plus ``H`` recurrent
+    predictions.  The helper is shared by ordinary sampling and replay
+    reanalysis so their boundary semantics cannot drift again.
+    """
+    num_unroll_steps = int(num_unroll_steps)
+    game_segment_length = int(game_segment_length)
+    position = int(position)
+    if num_unroll_steps <= 0 or game_segment_length <= 0 or position < 0:
+        raise ValueError(
+            'num_unroll_steps/game_segment_length must be positive and position non-negative'
+        )
+    total_roots = num_unroll_steps + 1
+    valid_roots = min(total_roots, max(0, game_segment_length - position))
+    mask = np.zeros(total_roots, dtype=np.float32)
+    mask[:valid_roots] = 1.0
+    return mask
+
+
 @contextmanager
 def _world_model_reanalysis_phase(world_model):
     """Temporarily enable replay reanalysis without leaking mutable model state."""
@@ -367,10 +389,16 @@ class UniZeroGameBuffer(MuZeroGameBuffer):
             timestep_tmp = game.timestep_segment[pos_in_game_segment:pos_in_game_segment +
                                                                   self._cfg.num_unroll_steps].tolist()
 
-            # TODO: the child_visits after position <self._cfg.game_segment_length> in the segment (with padded part) may not be updated
-            # So the corresponding position should not be used in the training
-            mask_tmp = [1. for i in range(min(len(actions_tmp), self._cfg.game_segment_length - pos_in_game_segment))]
-            mask_tmp += [0. for _ in range(self._cfg.num_unroll_steps + 1 - len(mask_tmp))]
+            # The model predicts the root plus ``H`` recurrent states, hence the
+            # validity mask has ``H+1`` entries.  The old code used the number of
+            # actions (H) and silently dropped the final recurrent target of every
+            # sampled sequence.  Keep only real roots inside the storage segment;
+            # padded actions/targets remain masked out near terminal boundaries.
+            mask_tmp = _build_segment_validity_mask(
+                self._cfg.num_unroll_steps,
+                self._cfg.game_segment_length,
+                pos_in_game_segment,
+            ).tolist()
 
             # pad random action
             actions_tmp += [
@@ -514,9 +542,14 @@ class UniZeroGameBuffer(MuZeroGameBuffer):
             actions_tmp = game.action_segment[pos_in_game_segment:pos_in_game_segment +
                                                                   self._cfg.num_unroll_steps].tolist()
 
-            # add mask for invalid actions (out of trajectory), 1 for valid, 0 for invalid
-            mask_tmp = [1. for i in range(len(actions_tmp))]
-            mask_tmp += [0. for _ in range(self._cfg.num_unroll_steps + 1 - len(mask_tmp))]
+            # The learner consumes root + H recurrent predictions.  Match that
+            # H+1 layout here as well; otherwise replay reanalysis and ordinary
+            # sampling train different numbers of valid positions.
+            mask_tmp = _build_segment_validity_mask(
+                self._cfg.num_unroll_steps,
+                self._cfg.game_segment_length,
+                pos_in_game_segment,
+            ).tolist()
             timestep_tmp = game.timestep_segment[pos_in_game_segment:pos_in_game_segment +
                                                                   self._cfg.num_unroll_steps].tolist()
 

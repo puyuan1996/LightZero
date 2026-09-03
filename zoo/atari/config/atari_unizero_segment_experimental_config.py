@@ -211,6 +211,7 @@ def _default_run_name(
         open_loop_consistency_weight, use_priority, use_augmentation,
         bootstrap_value_context, rebuild_kv_window_from_tokens, contextual_reanalysis,
         buffer_reanalyze_freq, stab_fix, grad_clip_mode, max_env_step,
+        collector_episode_life, collector_clip_rewards,
 ):
     """Build a self-describing run name from the resolved key config settings."""
     parts = [
@@ -232,6 +233,8 @@ def _default_run_name(
         f'olc{open_loop_consistency_weight:g}',
         'per' if use_priority else 'noper',
         'aug' if use_augmentation else 'noaug',
+        'lifeboundary' if collector_episode_life else 'fullgame',
+        'cliprew' if collector_clip_rewards else 'rawrew',
     ]
     parts.append(f'seed{seed}')
     parts.append(f'{max_env_step / 1e6:g}m')
@@ -414,6 +417,8 @@ def main(
         legacy_resume_alpha=None,
         log_metric=True,
         tb_log_all=False,
+        collector_episode_life=True,
+        collector_clip_rewards=True,
 ):
     action_space_size = atari_env_action_space_map[env_id]
     # ==============================================================
@@ -557,12 +562,17 @@ def main(
     if legacy_resume_alpha is not None and legacy_resume_alpha <= 0:
         raise ValueError(f'legacy_resume_alpha must be positive, got {legacy_resume_alpha}')
     if buffer_reanalyze_freq_override is not None and not contextual_reanalysis:
-        # Legacy UniZero reanalysis starts each replay MCTS root without its online Transformer
-        # history. An explicitly enabled refresh must therefore use the contextual path.
-        contextual_reanalysis = True
-        logging.warning(
-            'Explicit buffer reanalysis requires information-state-aligned targets; '
-            'enabling contextual_reanalysis automatically.'
+        # Do not silently change the experiment topology.  In particular,
+        # passing the historical ``2e-10`` sentinel used to turn an otherwise
+        # clean baseline into a contextual-reanalysis run.  Reanalysis targets
+        # are only information-state aligned on the contextual path, so an
+        # explicit frequency must be paired with an explicit opt-in.  The
+        # default (override=None) remains the tiny legacy frequency with no
+        # reanalysis events and no contextual history.
+        raise ValueError(
+            'Explicit buffer_reanalyze_freq requires --contextual-reanalysis. '
+            'Omit --buffer-reanalyze-freq for the no-reanalysis baseline; '
+            'do not pass the historical 2e-10 sentinel explicitly.'
         )
 
     policy_experiment_overrides, world_model_experiment_overrides = (
@@ -639,6 +649,8 @@ def main(
             collector_env_num=collector_env_num,
             evaluator_env_num=evaluator_env_num,
             n_evaluator_episode=evaluator_env_num,
+            collector_episode_life=bool(collector_episode_life),
+            collector_clip_rewards=bool(collector_clip_rewards),
             manager=dict(shared_memory=False, ),
         ),
         policy=dict(
@@ -841,6 +853,8 @@ def main(
             stab_fix=stab_fix,
             grad_clip_mode=grad_clip_mode,
             max_env_step=max_env_step,
+            collector_episode_life=collector_episode_life,
+            collector_clip_rewards=collector_clip_rewards,
         )
     run_name = _safe_run_name(run_name)
 
@@ -962,6 +976,24 @@ if __name__ == "__main__":
         '--collect-temperature', dest='collect_temperature', type=float, default=None,
         help='Override the fixed MCTS visit-count temperature used during collection (default 0.25).'
     )
+    collector_semantics = parser.add_argument_group('collector Atari semantics')
+    collector_semantics.add_argument(
+        '--collector-episode-life', dest='collector_episode_life', action='store_true',
+        help='Treat each lost life as a training episode boundary (default).'
+    )
+    collector_semantics.add_argument(
+        '--no-collector-episode-life', dest='collector_episode_life', action='store_false',
+        help='Keep full games intact in collector trajectories; useful for value-target ablations.'
+    )
+    collector_semantics.add_argument(
+        '--collector-clip-rewards', dest='collector_clip_rewards', action='store_true',
+        help='Clip collector rewards to sign(reward) (default).'
+    )
+    collector_semantics.add_argument(
+        '--no-collector-clip-rewards', dest='collector_clip_rewards', action='store_false',
+        help='Keep raw frame-skip-aggregated rewards in collector trajectories.'
+    )
+    parser.set_defaults(collector_episode_life=True, collector_clip_rewards=True)
     parser.add_argument(
         '--grad-clip-value', dest='grad_clip_value', type=float, default=None,
         help='Override the world-model gradient norm threshold (Atari default 5).'
@@ -1068,11 +1100,19 @@ if __name__ == "__main__":
         help='Use the longer training-only sequence context for TD bootstrap values (default).'
     )
     parser.set_defaults(bootstrap_value_context=False)
-    parser.add_argument(
-        '--contextual-reanalysis', action='store_true',
+    contextual_reanalysis_group = parser.add_mutually_exclusive_group()
+    contextual_reanalysis_group.add_argument(
+        '--contextual-reanalysis', dest='contextual_reanalysis', action='store_true',
         help='Opt in to rebuilding replay MCTS root priors and KV caches from the same short '
-             'observation/action history used by online planning. Legacy reanalysis remains the default.'
+             'observation/action history used by online planning. Required when an explicit '
+             '--buffer-reanalyze-freq is supplied.'
     )
+    contextual_reanalysis_group.add_argument(
+        '--no-contextual-reanalysis', dest='contextual_reanalysis', action='store_false',
+        help='Keep replay roots history-free (default); explicit reanalysis frequency is rejected '
+             'in this mode to prevent a silent legacy-target mismatch.'
+    )
+    parser.set_defaults(contextual_reanalysis=False)
     kv_window_group.add_argument(
         '--rebuild-kv-window-from-tokens', dest='rebuild_kv_window_from_tokens', action='store_true',
         help=(
@@ -1212,4 +1252,6 @@ if __name__ == "__main__":
         open_loop_consistency_horizon_override=args.open_loop_consistency_horizon,
         open_loop_prefix_transitions_override=args.open_loop_prefix_transitions,
         legacy_resume_alpha=args.legacy_resume_alpha,
+        collector_episode_life=args.collector_episode_life,
+        collector_clip_rewards=args.collector_clip_rewards,
     )

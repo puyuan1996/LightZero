@@ -338,8 +338,11 @@ class AtariEnvLightZero(BaseEnv):
         collector_env_num = cfg.pop('collector_env_num')
         cfg = copy.deepcopy(cfg)
         cfg.max_episode_steps = cfg.collect_max_episode_steps
-        cfg.episode_life = True
-        cfg.clip_rewards = True
+        # Keep the historical Atari training semantics by default, but allow
+        # controlled full-game collector ablations.  This is intentionally
+        # environment/config driven rather than hard-coded in the collector.
+        cfg.episode_life = bool(getattr(cfg, 'collector_episode_life', True))
+        cfg.clip_rewards = bool(getattr(cfg, 'collector_clip_rewards', True))
         return [cfg for _ in range(collector_env_num)]
 
     @staticmethod

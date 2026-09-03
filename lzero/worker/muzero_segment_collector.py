@@ -16,6 +16,17 @@ from lzero.mcts.buffer.game_segment import GameSegment
 from lzero.mcts.utils import prepare_observation
 
 
+def reset_observation_window(window: deque, observation: Any, frame_stack_num: int) -> None:
+    """Reset a per-environment frame window to one fresh Atari state."""
+    frame_stack_num = int(frame_stack_num)
+    if frame_stack_num <= 0:
+        raise ValueError(f'frame_stack_num must be positive, got {frame_stack_num}')
+    window.clear()
+    fresh_observation = to_ndarray(observation)
+    for _ in range(frame_stack_num):
+        window.append(np.array(fresh_observation, copy=True))
+
+
 def aggregate_episode_scalar_metrics(episode_info: List[Dict[str, Any]]) -> Dict[str, float]:
     """Average scalar per-episode diagnostics before writing collector telemetry.
 
@@ -442,8 +453,11 @@ class MuZeroSegmentCollector(ISerialCollector):
         # Stacked observation windows for initializing game segments.
         observation_window_stack = [deque(maxlen=self.policy_config.model.frame_stack_num) for _ in range(env_nums)]
         for env_id in range(env_nums):
-            initial_frames = [to_ndarray(init_obs[env_id]['observation']) for _ in range(self.policy_config.model.frame_stack_num)]
-            observation_window_stack[env_id].extend(initial_frames)
+            reset_observation_window(
+                observation_window_stack[env_id],
+                init_obs[env_id]['observation'],
+                self.policy_config.model.frame_stack_num,
+            )
             game_segments[env_id].reset(observation_window_stack[env_id])
 
         # Lists for storing values for priority calculation.
@@ -730,7 +744,28 @@ class MuZeroSegmentCollector(ISerialCollector):
                         exploration_counts[metric_name][env_id] = 0.
 
                     # Environment reset is handled by the env_manager automatically.
-                    # NOTE: Reset the policy state for the completed environment.
+                    # The done timestep still contains the terminal/lost-life frame.
+                    # Synchronize every per-env input from the fresh observation that
+                    # BaseEnvManager placed in ``ready_obs``; otherwise the first
+                    # action after each Atari life loss is evaluated on the previous
+                    # life's terminal state and its stale action mask/timestep.
+                    reset_obs = self._env.ready_obs
+                    while env_id not in reset_obs:
+                        time.sleep(retry_waiting_time)
+                        reset_obs = self._env.ready_obs
+                    reset_obs = reset_obs[env_id]
+                    self.action_mask_dict[env_id] = to_ndarray(reset_obs['action_mask'])
+                    self.to_play_dict[env_id] = to_ndarray(reset_obs['to_play'])
+                    self.timestep_dict[env_id] = to_ndarray(reset_obs.get('timestep', -1))
+                    if self.policy_config.use_ture_chance_label_in_chance_encoder:
+                        self.chance_dict[env_id] = to_ndarray(reset_obs['chance'])
+                    reset_observation_window(
+                        observation_window_stack[env_id],
+                        reset_obs['observation'],
+                        self.policy_config.model.frame_stack_num,
+                    )
+
+                    # Reset the policy state for the completed environment.
                     self._policy.reset([env_id], task_id=self.task_id)
                     self._reset_stat(env_id)
 
