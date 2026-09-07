@@ -938,7 +938,11 @@ class UniZeroPolicy(MuZeroPolicy):
         # (int) Frequency of hard target network update.
         target_update_freq=100,
         # (int) Frequency of soft target network update.
-        target_update_theta=0.05,
+        # The target wrapper is updated after every learner step (the legacy
+        # target_update_freq field is not consulted by UniZero).  0.05 gives a
+        # ~13-step half-life and lets rapidly drifting observation latents
+        # rewrite their own labels.  Use a slower EMA for stable long runs.
+        target_update_theta=0.005,
         # (int) Frequency of target network update.
         target_update_freq_for_intrinsic_reward=1000,
         # (float) Weight decay for training policy network.

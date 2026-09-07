@@ -18,7 +18,6 @@ from lzero.policy import visit_count_temperature
 from lzero.policy.random_policy import LightZeroRandomPolicy
 from lzero.worker import MuZeroEvaluator as Evaluator
 from lzero.worker import MuZeroSegmentCollector as Collector
-from tensorboardX import SummaryWriter
 from torch.utils.tensorboard import SummaryWriter
 
 from .utils import calculate_update_per_collect, random_collect

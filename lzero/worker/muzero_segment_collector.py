@@ -16,6 +16,11 @@ from lzero.mcts.buffer.game_segment import GameSegment
 from lzero.mcts.utils import prepare_observation
 
 
+# ``reward_mean`` aliases the explicit clipped life-return metric. Keep it in
+# console output, but avoid a second identical TensorBoard curve.
+_TB_DUPLICATE_COLLECT_FIELDS = frozenset({'reward_mean'})
+
+
 def reset_observation_window(window: deque, observation: Any, frame_stack_num: int) -> None:
     """Reset a per-environment frame window to one fresh Atari state."""
     frame_stack_num = int(frame_stack_num)
@@ -869,6 +874,8 @@ class MuZeroSegmentCollector(ISerialCollector):
             self._logger.info(f"Collector log (rank {self._rank}, task_id {self.task_id}):\n" + '\n'.join([f'{k}: {v}' for k, v in info.items()]))
             for k, v in info.items():
                 if k in ['each_reward']:
+                    continue
+                if k in _TB_DUPLICATE_COLLECT_FIELDS:
                     continue
                 if self.task_id is None:
                     # Log for single-task setting

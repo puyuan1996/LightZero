@@ -228,7 +228,7 @@ def _default_run_name(
         open_loop_consistency_weight, use_priority, use_augmentation,
         bootstrap_value_context, rebuild_kv_window_from_tokens, contextual_reanalysis,
         buffer_reanalyze_freq, stab_fix, grad_clip_mode, max_env_step,
-        collector_episode_life, collector_clip_rewards,
+        collector_episode_life=True, collector_clip_rewards=True,
 ):
     """Build a self-describing run name from the resolved key config settings."""
     parts = [

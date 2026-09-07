@@ -18,7 +18,6 @@ from lzero.policy import visit_count_temperature
 from lzero.policy.random_policy import LightZeroRandomPolicy
 from lzero.worker import MuZeroCollector as Collector
 from lzero.worker import MuZeroEvaluator as Evaluator
-from tensorboardX import SummaryWriter
 from torch.utils.tensorboard import SummaryWriter
 
 from .utils import calculate_update_per_collect, random_collect
@@ -86,7 +85,13 @@ def train_unizero(
 
     # Initialize environment and random seed
     collector_env.seed(cfg.seed)
-    evaluator_env.seed(cfg.seed, dynamic_seed=False)
+    # Keep evaluator runs reproducible while ensuring parallel environments do
+    # not share the same ALE trajectory.  BaseEnvManager expands an integer
+    # seed today, but passing the explicit list makes this contract robust
+    # across manager implementations and documents the intended A/B protocol.
+    evaluator_seed = [int(cfg.seed) + env_id for env_id in range(evaluator_env.env_num)]
+    logging.info('Evaluator seeds (static, distinct per env): %s', evaluator_seed)
+    evaluator_env.seed(evaluator_seed, dynamic_seed=False)
     set_pkg_seed(cfg.seed, use_cuda=torch.cuda.is_available())
 
     # Initialize wandb if specified

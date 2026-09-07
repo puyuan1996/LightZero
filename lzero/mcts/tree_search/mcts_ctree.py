@@ -1,4 +1,5 @@
 import copy
+import warnings
 from typing import TYPE_CHECKING, List, Any, Union, Optional
 
 import numpy as np
@@ -14,6 +15,43 @@ if TYPE_CHECKING:
     from lzero.mcts.ctree.ctree_efficientzero import ez_tree as ez_ctree
     from lzero.mcts.ctree.ctree_muzero import mz_tree as mz_ctree
     from lzero.mcts.ctree.ctree_gumbel_muzero import gmz_tree as gmz_ctree
+
+
+_LEGACY_MZ_TREE_WARNED = False
+
+
+def _batch_traverse_unizero(roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst,
+                            results, virtual_to_play_batch, deterministic):
+    """Call the UniZero ctree ABI while tolerating an older compiled extension.
+
+    ``mz_tree.pyx`` gained the ``deterministic`` argument, but the generated
+    ``mz_tree*.so`` is not always rebuilt when a shared checkout is mounted in
+    an RJob image.  An old extension rejects the eighth argument before doing
+    any work.  Its seven-argument implementation is otherwise identical and
+    defaults to ``deterministic=False``; use it only for this exact ABI
+    mismatch so genuine MCTS type errors are never hidden.
+    """
+    global _LEGACY_MZ_TREE_WARNED
+    try:
+        return tree_muzero.batch_traverse(
+            roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst,
+            results, virtual_to_play_batch, deterministic
+        )
+    except TypeError as exc:
+        if 'takes exactly 7 positional arguments' not in str(exc):
+            raise
+        if not _LEGACY_MZ_TREE_WARNED:
+            warnings.warn(
+                'Loaded legacy ctree_muzero extension without deterministic '
+                'argument; rebuild mz_tree*.so for exact evaluation tie-breaking.',
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            _LEGACY_MZ_TREE_WARNED = True
+        return tree_muzero.batch_traverse(
+            roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst,
+            results, virtual_to_play_batch
+        )
 
 
 class UniZeroMCTSCtree(object):
@@ -127,12 +165,12 @@ class UniZeroMCTSCtree(object):
                     Each simulation starts from the internal root state s0, and finishes when the simulation reaches a leaf node s_l.
                 """
                 if self._cfg.env_type == 'not_board_games':
-                    latent_state_index_in_search_path, latent_state_index_in_batch, last_actions, virtual_to_play_batch = tree_muzero.batch_traverse(
+                    latent_state_index_in_search_path, latent_state_index_in_batch, last_actions, virtual_to_play_batch = _batch_traverse_unizero(
                         roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst, results,
                         to_play_batch, self._cfg.deterministic
                     )
                 else:
-                    latent_state_index_in_search_path, latent_state_index_in_batch, last_actions, virtual_to_play_batch = tree_muzero.batch_traverse(
+                    latent_state_index_in_search_path, latent_state_index_in_batch, last_actions, virtual_to_play_batch = _batch_traverse_unizero(
                         roots, pb_c_base, pb_c_init, discount_factor, min_max_stats_lst, results,
                         copy.deepcopy(to_play_batch), self._cfg.deterministic
                     )

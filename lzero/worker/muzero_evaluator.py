@@ -20,6 +20,19 @@ from lzero.mcts.buffer.game_segment import GameSegment
 from lzero.mcts.utils import prepare_observation
 
 
+# Retained in console summaries for compatibility, but identical to the
+# explicit eval/* metrics below. Avoid writing duplicate TensorBoard curves.
+_TB_DUPLICATE_EVAL_FIELDS = frozenset({
+    'reward_mean', 'reward_max',
+    'eval/raw_full_episode_return_mean', 'eval/raw_full_episode_return_max',
+    'eval/full_episode_length_mean',
+    # BaseEnvManager's terminal info is also merged below. Atari evaluation
+    # runs with clipping disabled, so these means are the same raw return.
+    'eval_episode_return_mean', 'clipped_episode_return_mean',
+    'raw_episode_return_mean',
+})
+
+
 def balanced_episode_targets(env_num: int, n_episode: int) -> np.ndarray:
     """Return the fixed per-environment quotas used by ``VectorEvalMonitor``."""
     if env_num <= 0 or n_episode < env_num:
@@ -526,6 +539,8 @@ class MuZeroEvaluator(ISerialEvaluator):
             # Log to TensorBoard and WandB.
             for k, v in info.items():
                 if k in ['train_iter', 'ckpt_name', 'each_reward'] or not np.isscalar(v):
+                    continue
+                if k in _TB_DUPLICATE_EVAL_FIELDS:
                     continue
                 if self.task_id is None:
                     self._tb_logger.add_scalar(f'{self._instance_name}_iter/{k}', v, train_iter)
