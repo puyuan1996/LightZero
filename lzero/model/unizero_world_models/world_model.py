@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from lzero.model.common import SimNorm
 from lzero.model.utils import (calculate_dormant_ratio,
+                               calculate_effective_rank,
                                compute_average_weight_magnitude,
                                compute_effective_rank)
 from torch.distributions import (Categorical, Independent, Normal,
@@ -2529,13 +2530,18 @@ class WorldModel(
             # The 'representation_layer_name' argument specifies the target layer within the model's named modules.
             
             # Effective rank for the final linear layer of the encoder.
-            e_rank_last_linear = compute_effective_rank(
+            e_rank_last_linear = calculate_effective_rank(
                 self.tokenizer.encoder, inputs, representation_layer_name="last_linear"
             )
-            # Effective rank for the SimNorm layer of the encoder.
-            e_rank_sim_norm = compute_effective_rank(
-                self.tokenizer.encoder, inputs, representation_layer_name="sim_norm"
-            )
+            # Effective rank for the final norm layer of the encoder.  The single-task
+            # encoder always names this module ``final_norm`` regardless of the
+            # configured norm option (LayerNorm/SimNorm/Identity).
+            try:
+                e_rank_sim_norm = calculate_effective_rank(
+                    self.tokenizer.encoder, inputs, representation_layer_name="final_norm"
+                )
+            except Exception:
+                e_rank_sim_norm = torch.tensor(0.)
 
             # ==================== Clear Cache Using Correct API ====================
             if self.use_new_cache_manager:
