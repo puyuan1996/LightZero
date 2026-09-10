@@ -471,6 +471,8 @@ def apply_per_sample_is_weights(weights, losses, per_sample_policy_loss, scalar_
         * losses.intermediate_losses.get('open_loop_consistency_loss', 0.)
         + getattr(losses, 'open_loop_recurrent_loss_weight', 0.)
         * losses.intermediate_losses.get('open_loop_recurrent_loss', 0.)
+        + getattr(losses, 'latent_norm_reg_loss_weight', 0.)
+        * losses.intermediate_losses.get('latent_norm_reg_loss', 0.)
     )
     return (weights.reshape(-1) * per_sample_total_loss).mean() + auxiliary_loss
 
@@ -690,6 +692,13 @@ class UniZeroPolicy(MuZeroPolicy):
                 latent_recon_loss_weight=0.,
                 # (float) The weight of the perceptual loss.
                 perceptual_loss_weight=0.,
+                # (float) Weight of the optional soft anchor on the encoder-output
+                # latent L2 norm.  0 disables it; when positive, per-token latent
+                # norms are pulled toward ``latent_norm_reg_target``.
+                latent_norm_reg_weight=0.,
+                # (float) Target latent L2 norm for the soft anchor.  <= 0 resolves
+                # to sqrt(embed_dim), the LayerNorm(gamma=1) initialization scale.
+                latent_norm_reg_target=0.,
                 # (float) Optional differentiable open-loop consistency objective.  Keep all
                 # open-loop training objectives disabled by default; experiments opt in by
                 # supplying a positive weight.

@@ -448,6 +448,7 @@ def main(
         target_update_theta_override=None,
         cosine_lr_scheduler_override=None,
         no_decay_bias_norm_override=None,
+        latent_norm_reg_weight_override=None,
         frame_stack_num_override=None,
         eval_temperature_override=None,
         root_cache_key_round_decimals_override=None,
@@ -557,6 +558,12 @@ def main(
         True if no_decay_bias_norm_override is None
         else bool(no_decay_bias_norm_override)
     )
+    latent_norm_reg_weight = (
+        0.0 if latent_norm_reg_weight_override is None
+        else float(latent_norm_reg_weight_override)
+    )
+    if latent_norm_reg_weight < 0:
+        raise ValueError('latent_norm_reg_weight must be non-negative')
     frame_stack_num = _resolve_frame_stack_num(frame_stack_num_override)
     observation_shape, gray_scale, image_channel = _stacked_observation_spec(frame_stack_num)
     eval_temperature = _resolve_eval_temperature(eval_temperature_override)
@@ -753,6 +760,7 @@ def main(
                 world_model_cfg=dict(
                     latent_recon_loss_weight=0.0,
                     perceptual_loss_weight=0.0,
+                    latent_norm_reg_weight=latent_norm_reg_weight,
                     norm_type=norm_type,
                     final_norm_option_in_obs_head='LayerNorm',
                     final_norm_option_in_encoder='LayerNorm',
@@ -1137,6 +1145,9 @@ if __name__ == "__main__":
              '(legacy AdamW_mix_lr_wdecay behavior).'
     )
     parser.set_defaults(no_decay_bias_norm=None)
+    parser.add_argument('--latent-norm-reg-weight', dest='latent_norm_reg_weight', type=float, default=None,
+                        help='Weight of the soft anchor pulling per-token encoder latent L2 norms to '
+                             'sqrt(embed_dim) (default 0 = disabled; R3 fallback for latent scale drift).')
     parser.add_argument('--frame-stack-num', dest='frame_stack_num', type=int, default=None,
                         choices=(1, 4),
                         help='Observation frame stack. 1 keeps the legacy RGB (3,64,64) recipe; '
@@ -1342,6 +1353,7 @@ if __name__ == "__main__":
         target_update_theta_override=args.target_update_theta,
         cosine_lr_scheduler_override=args.cosine_lr_scheduler,
         no_decay_bias_norm_override=args.no_decay_bias_norm,
+        latent_norm_reg_weight_override=args.latent_norm_reg_weight,
         frame_stack_num_override=args.frame_stack_num,
         eval_temperature_override=args.eval_temperature,
         root_cache_key_round_decimals_override=args.root_cache_key_round_decimals,

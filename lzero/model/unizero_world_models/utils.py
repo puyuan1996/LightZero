@@ -271,6 +271,7 @@ class LossWithIntermediateLosses:
     def __init__(
             self, latent_recon_loss_weight=0, perceptual_loss_weight=0,
             open_loop_consistency_loss_weight=0, open_loop_recurrent_loss_weight=0,
+            latent_norm_reg_loss_weight=0,
             continuous_action_space=False, **kwargs
     ):
         # Ensure that kwargs is not empty
@@ -300,6 +301,7 @@ class LossWithIntermediateLosses:
         self.perceptual_loss_weight = perceptual_loss_weight
         self.open_loop_consistency_loss_weight = open_loop_consistency_loss_weight
         self.open_loop_recurrent_loss_weight = open_loop_recurrent_loss_weight
+        self.latent_norm_reg_loss_weight = latent_norm_reg_loss_weight
 
         # Initialize the total loss tensor on the correct device
         self.loss_total = torch.tensor(0., device=device)
@@ -322,6 +324,8 @@ class LossWithIntermediateLosses:
                 self.loss_total += self.open_loop_consistency_loss_weight * v
             elif k == 'open_loop_recurrent_loss':
                 self.loss_total += self.open_loop_recurrent_loss_weight * v
+            elif k == 'latent_norm_reg_loss':
+                self.loss_total += self.latent_norm_reg_loss_weight * v
 
         self.intermediate_losses = {
             k: v if isinstance(v, dict) or isinstance(v, np.ndarray) or isinstance(v, torch.Tensor) else (v if isinstance(v, float) else v.item())

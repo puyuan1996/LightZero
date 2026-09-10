@@ -665,6 +665,11 @@ class WorldModel(
         self.env_num = self.config.env_num
         self.num_layers = self.config.num_layers
         self.sim_norm = SimNorm(simnorm_dim=self.group_size)
+        # Optional soft anchor on the encoder-output latent scale: penalizes the
+        # squared deviation of per-token L2 norms from ``latent_norm_reg_target``
+        # (<= 0 resolves to sqrt(embed_dim)).  Disabled at weight 0.
+        self.latent_norm_reg_weight = getattr(self.config, 'latent_norm_reg_weight', 0.0)
+        self.latent_norm_reg_target = getattr(self.config, 'latent_norm_reg_target', 0.0)
 
         # ==================== [NEW] Policy Stability Fix Options ====================
         # Load fix options from config (with defaults for backward compatibility)
@@ -2561,7 +2566,26 @@ class WorldModel(
             e_rank_sim_norm = torch.tensor(0.)
 
         # Calculate the L2 norm of the latent state roots
-        latent_state_l2_norms = torch.norm(obs_embeddings, p=2, dim=2).mean()
+        latent_token_l2_norms = torch.norm(obs_embeddings, p=2, dim=2)
+        latent_state_l2_norms = latent_token_l2_norms.mean()
+
+        # Optional soft scale anchor on the encoder outputs.  The obs-prediction
+        # target is the EMA encoder itself, so without an explicit anchor nothing
+        # pins the absolute latent scale (LayerNorm affine drift).  The root token
+        # is always valid; padded positions are excluded via mask_padding.
+        if self.latent_norm_reg_weight > 0:
+            reg_target = self.latent_norm_reg_target
+            if reg_target <= 0:
+                reg_target = float(np.sqrt(obs_embeddings.shape[-1]))
+            norm_deviation = (latent_token_l2_norms - reg_target) ** 2
+            if 'mask_padding' in batch and batch['mask_padding'].shape == latent_token_l2_norms.shape:
+                valid = batch['mask_padding'].float().clone()
+                valid[:, 0] = 1.0
+                latent_norm_reg_loss = (norm_deviation * valid).sum() / valid.sum().clamp_min(1.0)
+            else:
+                latent_norm_reg_loss = norm_deviation.mean()
+        else:
+            latent_norm_reg_loss = torch.tensor(0., device=self.device)
 
         # Action tokens
         if self.continuous_action_space:
@@ -2912,6 +2936,7 @@ class WorldModel(
                 perceptual_loss_weight=self.perceptual_loss_weight,
                 open_loop_consistency_loss_weight=self.open_loop_consistency_loss_weight,
                 open_loop_recurrent_loss_weight=self.open_loop_recurrent_loss_weight,
+                latent_norm_reg_loss_weight=self.latent_norm_reg_weight,
                 continuous_action_space=True,
                 loss_obs=discounted_loss_obs,
                 loss_rewards=discounted_loss_rewards,
@@ -2941,6 +2966,7 @@ class WorldModel(
                 e_rank_last_linear = e_rank_last_linear,
                 e_rank_sim_norm = e_rank_sim_norm,
                 latent_state_l2_norms=latent_state_l2_norms,
+                latent_norm_reg_loss=latent_norm_reg_loss,
                 policy_mu=mu,
                 policy_sigma=sigma,
                 target_sampled_actions=target_sampled_actions,
@@ -2960,6 +2986,7 @@ class WorldModel(
                 perceptual_loss_weight=self.perceptual_loss_weight,
                 open_loop_consistency_loss_weight=self.open_loop_consistency_loss_weight,
                 open_loop_recurrent_loss_weight=self.open_loop_recurrent_loss_weight,
+                latent_norm_reg_loss_weight=self.latent_norm_reg_weight,
                 continuous_action_space=False,
                 loss_obs=discounted_loss_obs,
                 loss_rewards=discounted_loss_rewards,
@@ -2989,6 +3016,7 @@ class WorldModel(
                 e_rank_last_linear = e_rank_last_linear,
                 e_rank_sim_norm = e_rank_sim_norm,
                 latent_state_l2_norms=latent_state_l2_norms,
+                latent_norm_reg_loss=latent_norm_reg_loss,
                 value_priority=value_priority,
                 intermediate_tensor_x=intermediate_tensor_x,
                 obs_embeddings=detached_obs_embeddings,
