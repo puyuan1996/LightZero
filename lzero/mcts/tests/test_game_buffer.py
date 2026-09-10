@@ -36,6 +36,18 @@ def test_unizero_validity_mask_keeps_root_plus_h_recurrent_states():
     assert _build_segment_validity_mask(10, 200, 199).tolist() == [1.0] + [0.0] * 10
 
 
+@pytest.mark.unittest
+def test_unizero_validity_mask_excludes_ghost_roots_of_short_done_segments():
+    # Done segments are stored unpadded (fewer actions than game_segment_length).
+    # Roots past the stored tail must be masked out: their obs is the repeated
+    # terminal frame with random padding actions and zero reward/value targets.
+    assert _build_segment_validity_mask(10, 100, 0).tolist() == [1.0] * 11
+    assert _build_segment_validity_mask(10, 100, 90).tolist() == [1.0] * 10 + [0.0]
+    assert _build_segment_validity_mask(10, 100, 95).tolist() == [1.0] * 5 + [0.0] * 6
+    assert _build_segment_validity_mask(10, 100, 99).tolist() == [1.0] + [0.0] * 10
+    assert _build_segment_validity_mask(10, 100, 100).tolist() == [0.0] * 11
+
+
 def _make_varied_action_config(action_space_size=100, num_of_sampled_actions=3):
     return EasyDict(
         dict(

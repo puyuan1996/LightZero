@@ -16,23 +16,30 @@ if TYPE_CHECKING:
 from line_profiler import line_profiler
 
 
-def _build_segment_validity_mask(num_unroll_steps: int, game_segment_length: int,
+def _build_segment_validity_mask(num_unroll_steps: int, segment_action_length: int,
                                  position: int) -> np.ndarray:
     """Build the root+H validity mask used by UniZero replay batches.
 
     A UniZero forward pass emits one root prediction plus ``H`` recurrent
     predictions.  The helper is shared by ordinary sampling and replay
     reanalysis so their boundary semantics cannot drift again.
+
+    ``segment_action_length`` must be the number of actions actually stored in
+    the sampled segment (``len(game.action_segment)``), not the configured
+    ``game_segment_length``: done segments are stored unpadded with fewer
+    transitions, and clamping by the configured length would mark ghost roots
+    beyond the real tail as valid (repeated terminal frame, random padding
+    action, zero reward/value targets).
     """
     num_unroll_steps = int(num_unroll_steps)
-    game_segment_length = int(game_segment_length)
+    segment_action_length = int(segment_action_length)
     position = int(position)
-    if num_unroll_steps <= 0 or game_segment_length <= 0 or position < 0:
+    if num_unroll_steps <= 0 or segment_action_length <= 0 or position < 0:
         raise ValueError(
-            'num_unroll_steps/game_segment_length must be positive and position non-negative'
+            'num_unroll_steps/segment_action_length must be positive and position non-negative'
         )
     total_roots = num_unroll_steps + 1
-    valid_roots = min(total_roots, max(0, game_segment_length - position))
+    valid_roots = min(total_roots, max(0, segment_action_length - position))
     mask = np.zeros(total_roots, dtype=np.float32)
     mask[:valid_roots] = 1.0
     return mask
@@ -390,13 +397,13 @@ class UniZeroGameBuffer(MuZeroGameBuffer):
                                                                   self._cfg.num_unroll_steps].tolist()
 
             # The model predicts the root plus ``H`` recurrent states, hence the
-            # validity mask has ``H+1`` entries.  The old code used the number of
-            # actions (H) and silently dropped the final recurrent target of every
-            # sampled sequence.  Keep only real roots inside the storage segment;
-            # padded actions/targets remain masked out near terminal boundaries.
+            # validity mask has ``H+1`` entries.  Clamp by the number of actions
+            # actually stored in this segment: done segments are kept unpadded
+            # (shorter than ``game_segment_length``), so the configured length
+            # would otherwise mark ghost roots past the real tail as valid.
             mask_tmp = _build_segment_validity_mask(
                 self._cfg.num_unroll_steps,
-                self._cfg.game_segment_length,
+                len(game.action_segment),
                 pos_in_game_segment,
             ).tolist()
 
@@ -544,10 +551,11 @@ class UniZeroGameBuffer(MuZeroGameBuffer):
 
             # The learner consumes root + H recurrent predictions.  Match that
             # H+1 layout here as well; otherwise replay reanalysis and ordinary
-            # sampling train different numbers of valid positions.
+            # sampling train different numbers of valid positions.  Clamp by the
+            # actions actually stored in this (possibly unpadded) segment.
             mask_tmp = _build_segment_validity_mask(
                 self._cfg.num_unroll_steps,
-                self._cfg.game_segment_length,
+                len(game.action_segment),
                 pos_in_game_segment,
             ).tolist()
             timestep_tmp = game.timestep_segment[pos_in_game_segment:pos_in_game_segment +

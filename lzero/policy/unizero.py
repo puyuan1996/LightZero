@@ -937,11 +937,14 @@ class UniZeroPolicy(MuZeroPolicy):
         learning_rate=0.0001,
         # (int) Frequency of hard target network update.
         target_update_freq=100,
-        # (int) Frequency of soft target network update.
+        # (float) EMA coefficient for the soft target network.  UniZero updates
+        # the momentum wrapper after every learner step, so target_update_freq
+        # is not a scheduling knob here; expose theta explicitly to avoid a
+        # misleading hard-update configuration.
         # The target wrapper is updated after every learner step (the legacy
-        # target_update_freq field is not consulted by UniZero).  0.05 gives a
-        # ~13-step half-life and lets rapidly drifting observation latents
-        # rewrite their own labels.  Use a slower EMA for stable long runs.
+        # target_update_freq field is not consulted by UniZero).  0.005 gives a
+        # ~138-step half-life and prevents rapidly drifting observation latents
+        # from rewriting their own labels.
         target_update_theta=0.005,
         # (int) Frequency of target network update.
         target_update_freq_for_intrinsic_reward=1000,
@@ -995,6 +998,10 @@ class UniZeroPolicy(MuZeroPolicy):
         # (float) The fixed temperature value for MCTS action selection, which is used to control the exploration.
         # The larger the value, the more exploration. This value is only used when manual_temperature_decay=False.
         fixed_temperature_value=0.25,
+        # (float) Temperature for MCTS action selection during evaluation.  0 keeps the legacy
+        # deterministic argmax; a positive value samples from the visit distribution instead,
+        # which distinguishes "the policy is capped" from "deterministic play falls into cycles".
+        eval_temperature=0.0,
         # (bool) Whether to use the true chance in MCTS in some environments with stochastic dynamics, such as 2048.
         use_ture_chance_label_in_chance_encoder=False,
         # (int) The number of steps to accumulate gradients before performing an optimization step.
@@ -2493,9 +2500,14 @@ class UniZeroPolicy(MuZeroPolicy):
                 # the index within the legal action set, rather than the index in the entire action set.
                 #  Setting deterministic=True implies choosing the action with the highest value (argmax) rather than
                 # sampling during the evaluation phase.
-                action_index_in_legal_action_set, visit_count_distribution_entropy = select_action(
-                    distributions, temperature=1, deterministic=True
-                )
+                if self._cfg.eval_temperature > 0:
+                    action_index_in_legal_action_set, visit_count_distribution_entropy = select_action(
+                        distributions, temperature=self._cfg.eval_temperature, deterministic=False
+                    )
+                else:
+                    action_index_in_legal_action_set, visit_count_distribution_entropy = select_action(
+                        distributions, temperature=1, deterministic=True
+                    )
                 # NOTE: Convert the ``action_index_in_legal_action_set`` to the corresponding ``action`` in the
                 # entire action set.
                 action = np.where(action_mask[i] == 1.0)[0][action_index_in_legal_action_set]

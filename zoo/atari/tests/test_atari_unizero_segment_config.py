@@ -163,6 +163,113 @@ def test_experimental_collect_temperature_is_explicit_and_validated():
         atari_unizero_segment_experimental_config._resolve_collect_temperature(0)
 
 
+def test_experimental_target_ema_is_explicit_and_validated():
+    resolver = atari_unizero_segment_experimental_config._resolve_target_update_theta
+    assert resolver(None) == pytest.approx(0.005)
+    assert resolver(0.05) == pytest.approx(0.05)
+    with pytest.raises(ValueError, match='target_update_theta'):
+        resolver(0)
+    with pytest.raises(ValueError, match='target_update_theta'):
+        resolver(1.1)
+
+
+def test_experimental_frame_stack_is_explicit_and_validated():
+    resolver = atari_unizero_segment_experimental_config._resolve_frame_stack_num
+    assert resolver(None) == 1
+    assert resolver(4) == 4
+    with pytest.raises(ValueError, match='frame_stack_num'):
+        resolver(2)
+    with pytest.raises(ValueError, match='frame_stack_num'):
+        resolver(0)
+    spec = atari_unizero_segment_experimental_config._stacked_observation_spec
+    assert spec(1) == ((3, 64, 64), False, 3)
+    assert spec(4) == ((4, 64, 64), True, 1)
+
+
+def test_experimental_stack4_wires_grayscale_stacking(monkeypatch, tmp_path):
+    import lzero.entry
+    captured = {}
+
+    def fake_train(config_pair, **kwargs):
+        captured['config'] = config_pair[0]
+
+    monkeypatch.setattr(lzero.entry, 'train_unizero_segment', fake_train)
+    atari_unizero_segment_experimental_config.main(
+        env_id='ALE/MsPacman-v5', seed=0, output_root=str(tmp_path),
+        run_name='mspacman-stack4', max_env_step_override=500000,
+        frame_stack_num_override=4,
+    )
+    config = captured['config']
+    assert config.env.frame_stack_num == 4
+    assert config.env.observation_shape == (4, 64, 64)
+    assert config.env.gray_scale is True
+    assert config.policy.gray_scale is True
+    assert config.policy.model.frame_stack_num == 4
+    assert config.policy.model.image_channel == 1
+    assert config.policy.model.observation_shape == (4, 64, 64)
+    assert 'stack4' in config.exp_name
+
+
+def test_experimental_stack1_keeps_legacy_rgb_recipe(monkeypatch, tmp_path):
+    import lzero.entry
+    captured = {}
+
+    def fake_train(config_pair, **kwargs):
+        captured['config'] = config_pair[0]
+
+    monkeypatch.setattr(lzero.entry, 'train_unizero_segment', fake_train)
+    atari_unizero_segment_experimental_config.main(
+        env_id='ALE/MsPacman-v5', seed=0, output_root=str(tmp_path),
+        run_name='mspacman-legacy-recipe', max_env_step_override=500000,
+    )
+    config = captured['config']
+    assert config.env.frame_stack_num == 1
+    assert config.env.observation_shape == (3, 64, 64)
+    assert config.env.gray_scale is False
+    assert config.policy.model.frame_stack_num == 1
+    assert config.policy.model.image_channel == 3
+    assert 'stack4' not in config.exp_name
+
+
+def test_experimental_eval_temperature_defaults_to_deterministic(monkeypatch, tmp_path):
+    import lzero.entry
+    captured = {}
+
+    def fake_train(config_pair, **kwargs):
+        captured['config'] = config_pair[0]
+
+    monkeypatch.setattr(lzero.entry, 'train_unizero_segment', fake_train)
+    atari_unizero_segment_experimental_config.main(
+        env_id='ALE/MsPacman-v5', seed=0, output_root=str(tmp_path),
+        run_name='mspacman-eval-legacy', max_env_step_override=500000,
+    )
+    assert captured['config'].policy.eval_temperature == pytest.approx(0.0)
+
+    resolver = atari_unizero_segment_experimental_config._resolve_eval_temperature
+    assert resolver(None) == pytest.approx(0.0)
+    assert resolver(0.5) == pytest.approx(0.5)
+    with pytest.raises(ValueError, match='eval_temperature'):
+        resolver(-0.1)
+
+
+def test_experimental_cosine_lr_is_opt_in(monkeypatch, tmp_path):
+    import lzero.entry
+    captured = {}
+
+    def fake_train(config_pair, **kwargs):
+        captured['config'] = config_pair[0]
+
+    monkeypatch.setattr(lzero.entry, 'train_unizero_segment', fake_train)
+    atari_unizero_segment_experimental_config.main(
+        env_id='ALE/Pong-v5', seed=0, output_root=str(tmp_path),
+        run_name='pong-cosine-lr', max_env_step_override=500000,
+        cosine_lr_scheduler_override=True,
+    )
+    config = captured['config']
+    assert config.policy.cos_lr_scheduler is True
+    assert 'coslr' in config.exp_name
+
+
 def test_experimental_default_run_name_records_resolved_training_features():
     run_name = atari_unizero_segment_experimental_config._default_run_name(
         'Pong', 0, '20260828_120000',
@@ -174,6 +281,7 @@ def test_experimental_default_run_name_records_resolved_training_features():
         collect_temperature=0.25,
         obs_loss_weight=10.0,
         value_loss_weight=0.5,
+        target_update_theta=0.005,
         open_loop_consistency_weight=0.0,
         use_priority=False,
         use_augmentation=False,
@@ -186,7 +294,7 @@ def test_experimental_default_run_name_records_resolved_training_features():
         max_env_step=500000,
     )
 
-    assert '_stabfix_clip-separate_encoder_rebuildkv_ctxreanalyze_reanalyze0.02_' in run_name
+    assert '_ema0.005_constlr_stabfix_clip-separate_encoder_rebuildkv_ctxreanalyze_reanalyze0.02_' in run_name
     assert '_nobootctx_olc0_noper_noaug_' in run_name
     assert run_name.endswith('_seed0_0.5m_20260828_120000')
 
@@ -206,7 +314,7 @@ def test_experimental_cache_namespace_preserves_legacy_and_isolated_modes():
     assert resolver(8, 8, True) == 16
 
 
-def test_experimental_defaults_use_fast_sparse_evaluation(monkeypatch, tmp_path):
+def test_experimental_defaults_use_eight_seed_evaluation(monkeypatch, tmp_path):
     import lzero.entry
 
     captured = {}
@@ -226,9 +334,10 @@ def test_experimental_defaults_use_fast_sparse_evaluation(monkeypatch, tmp_path)
     config = captured['config']
     assert config.policy.obs_loss_weight == 1.0
     assert config.policy.grad_clip_mode == 'separate_encoder'
-    assert config.env.evaluator_env_num == 3
-    assert config.env.n_evaluator_episode == 3
-    assert config.policy.evaluator_env_num == 3
+    assert config.env.evaluator_env_num == 8
+    assert config.env.n_evaluator_episode == 8
+    assert config.policy.evaluator_env_num == 8
+    assert config.policy.target_update_theta == pytest.approx(0.005)
     assert config.policy.eval_freq == int(1e4)
 
 

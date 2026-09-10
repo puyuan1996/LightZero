@@ -229,6 +229,10 @@ def _default_run_name(
         bootstrap_value_context, rebuild_kv_window_from_tokens, contextual_reanalysis,
         buffer_reanalyze_freq, stab_fix, grad_clip_mode, max_env_step,
         collector_episode_life=True, collector_clip_rewards=True,
+        target_update_theta=0.005,
+        cosine_lr_scheduler=False,
+        frame_stack_num=1,
+        eval_temperature=0.0,
 ):
     """Build a self-describing run name from the resolved key config settings."""
     parts = [
@@ -241,6 +245,12 @@ def _default_run_name(
         f'temp{collect_temperature:g}',
         f'obs{obs_loss_weight:g}',
         f'value{value_loss_weight:g}',
+        f'ema{target_update_theta:g}',
+        'coslr' if cosine_lr_scheduler else 'constlr',
+        # Only non-default stacking is encoded so legacy stack-1 run names stay
+        # directly comparable with historical batches.
+        f'stack{frame_stack_num}' if frame_stack_num != 1 else None,
+        f'evaltemp{eval_temperature:g}' if eval_temperature > 0 else None,
         'stabfix' if stab_fix else 'nostabfix',
         f'clip-{grad_clip_mode}',
         'rebuildkv' if rebuild_kv_window_from_tokens else 'norebuildkv',
@@ -253,6 +263,7 @@ def _default_run_name(
         'lifeboundary' if collector_episode_life else 'fullgame',
         'cliprew' if collector_clip_rewards else 'rawrew',
     ]
+    parts = [part for part in parts if part is not None]
     parts.append(f'seed{seed}')
     parts.append(f'{max_env_step / 1e6:g}m')
     parts.append(timestamp)
@@ -283,6 +294,44 @@ def _resolve_collect_temperature(value):
             f'collect_temperature must be positive, got {collect_temperature}'
         )
     return collect_temperature
+
+
+def _resolve_target_update_theta(value):
+    """Validate the target EMA coefficient before constructing GPU workers."""
+    theta = 0.005 if value is None else float(value)
+    if not 0.0 < theta <= 1.0:
+        raise ValueError(f'target_update_theta must be in (0, 1], got {theta}')
+    return theta
+
+
+def _resolve_frame_stack_num(value):
+    """Validate the frame-stack override before deriving env/model shapes.
+
+    Stack 1 keeps the historical RGB (3, 64, 64) recipe.  Stack 4 switches to
+    the MuZero-style grayscale stacking path: the env warps single-channel
+    frames and the collector stacks ``frame_stack_num`` of them into a
+    (4, 64, 64) model input, so velocity is observable even with zero token
+    context.
+    """
+    frame_stack_num = 1 if value is None else int(value)
+    if frame_stack_num not in (1, 4):
+        raise ValueError(f'frame_stack_num must be 1 or 4, got {frame_stack_num}')
+    return frame_stack_num
+
+
+def _resolve_eval_temperature(value):
+    """0 keeps the legacy deterministic argmax evaluation; >0 samples actions."""
+    eval_temperature = 0.0 if value is None else float(value)
+    if eval_temperature < 0:
+        raise ValueError(f'eval_temperature must be non-negative, got {eval_temperature}')
+    return eval_temperature
+
+
+def _stacked_observation_spec(frame_stack_num):
+    """Return (observation_shape, gray_scale, image_channel) for the stack mode."""
+    if frame_stack_num == 1:
+        return (3, 64, 64), False, 3
+    return (frame_stack_num, 64, 64), True, 1
 
 
 def _resolve_inference_env_num(collector_env_num, evaluator_env_num, isolate_eval_cache):
@@ -392,6 +441,10 @@ def main(
         num_unroll_steps_override=None,
         obs_loss_weight_override=None,
         value_loss_weight_override=None,
+        target_update_theta_override=None,
+        cosine_lr_scheduler_override=None,
+        frame_stack_num_override=None,
+        eval_temperature_override=None,
         root_cache_key_round_decimals_override=None,
         kv_cache_clear_interval_override=None,
         empty_cuda_cache_on_cache_reset_override=None,
@@ -443,8 +496,10 @@ def main(
     # ==============================================================
     collector_env_num = 8
     num_segments = 8
+    # Eight deterministic episodes reduce the duplicate-trajectory noise seen
+    # with the historical three-episode evaluator while remaining inexpensive.
     evaluator_env_num = (
-        3 if evaluator_env_num_override is None else int(evaluator_env_num_override)
+        8 if evaluator_env_num_override is None else int(evaluator_env_num_override)
     )
     eval_freq = int(1e4)
     if evaluator_env_num <= 0:
@@ -488,6 +543,14 @@ def main(
     value_loss_weight = 0.5 if value_loss_weight_override is None else float(value_loss_weight_override)
     if obs_loss_weight < 0 or value_loss_weight < 0:
         raise ValueError('loss weights must be non-negative')
+    target_update_theta = _resolve_target_update_theta(target_update_theta_override)
+    cosine_lr_scheduler = (
+        False if cosine_lr_scheduler_override is None
+        else bool(cosine_lr_scheduler_override)
+    )
+    frame_stack_num = _resolve_frame_stack_num(frame_stack_num_override)
+    observation_shape, gray_scale, image_channel = _stacked_observation_spec(frame_stack_num)
+    eval_temperature = _resolve_eval_temperature(eval_temperature_override)
     root_cache_key_round_decimals = (
         0 if root_cache_key_round_decimals_override is None
         else int(root_cache_key_round_decimals_override)
@@ -652,8 +715,9 @@ def main(
         env=dict(
             stop_value=int(1e6),
             env_id=env_id,
-            observation_shape=(3, 64, 64),
-            gray_scale=False,
+            observation_shape=observation_shape,
+            gray_scale=gray_scale,
+            frame_stack_num=frame_stack_num,
             collector_env_num=collector_env_num,
             evaluator_env_num=evaluator_env_num,
             n_evaluator_episode=evaluator_env_num,
@@ -662,8 +726,13 @@ def main(
             manager=dict(shared_memory=False, ),
         ),
         policy=dict(
+            # Grayscale is a policy-level flag consumed by the replay game
+            # segments (jpeg decode shape); it must track the env stack mode.
+            gray_scale=gray_scale,
             model=dict(
-                observation_shape=(3, 64, 64),
+                observation_shape=observation_shape,
+                image_channel=image_channel,
+                frame_stack_num=frame_stack_num,
                 action_space_size=action_space_size,
                 reward_support_range=(-300., 301., 1.),
                 value_support_range=(-300., 301., 1.),
@@ -722,6 +791,8 @@ def main(
             optim_type='AdamW_mix_lr_wdecay',
             learning_rate=0.0001,
             weight_decay=1e-2,
+            target_update_theta=target_update_theta,
+            cos_lr_scheduler=cosine_lr_scheduler,
             batch_size=batch_size,
             replay_ratio=replay_ratio,
             num_unroll_steps=num_unroll_steps,
@@ -742,6 +813,7 @@ def main(
             empty_cuda_cache_on_cache_reset=empty_cuda_cache_on_cache_reset,
             num_simulations=num_simulations,
             fixed_temperature_value=collect_temperature,
+            eval_temperature=eval_temperature,
             obs_loss_weight=obs_loss_weight,
             value_loss_weight=value_loss_weight,
             grad_clip_value=grad_clip_value,
@@ -851,6 +923,10 @@ def main(
             collect_temperature=collect_temperature,
             obs_loss_weight=obs_loss_weight,
             value_loss_weight=value_loss_weight,
+            target_update_theta=target_update_theta,
+            cosine_lr_scheduler=cosine_lr_scheduler,
+            frame_stack_num=frame_stack_num,
+            eval_temperature=eval_temperature,
             open_loop_consistency_weight=open_loop_consistency_weight_override or 0,
             use_priority=resolved_use_priority,
             use_augmentation=use_augmentation,
@@ -974,7 +1050,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--evaluator-env-num', dest='evaluator_env_num', type=int, default=None,
-        help='Number of deterministic evaluation environments/episodes (default 3).'
+        help='Number of deterministic evaluation environments/episodes (default 8).'
     )
     parser.add_argument(
         '--collect-num-simulations', dest='collect_num_simulations', type=int, default=None,
@@ -1026,6 +1102,27 @@ if __name__ == "__main__":
                         help='Override observation reconstruction loss weight (default 1).')
     parser.add_argument('--value-loss-weight', type=float, default=None,
                         help='Override value loss weight (default 0.5; the historical declared value was 0.25).')
+    parser.add_argument('--target-update-theta', dest='target_update_theta', type=float, default=None,
+                        help='Momentum target EMA coefficient (default 0.005; larger values chase online weights faster).')
+    lr_scheduler_group = parser.add_mutually_exclusive_group()
+    lr_scheduler_group.add_argument(
+        '--cosine-lr-scheduler', dest='cosine_lr_scheduler', action='store_true',
+        help='Cosine-decay learner LR from 1e-4 to final_learning_rate (4e-5) over total_iterations.'
+    )
+    lr_scheduler_group.add_argument(
+        '--constant-lr-scheduler', dest='cosine_lr_scheduler', action='store_false',
+        help='Keep the constant learner LR (default).'
+    )
+    parser.set_defaults(cosine_lr_scheduler=None)
+    parser.add_argument('--frame-stack-num', dest='frame_stack_num', type=int, default=None,
+                        choices=(1, 4),
+                        help='Observation frame stack. 1 keeps the legacy RGB (3,64,64) recipe; '
+                             '4 switches to grayscale MuZero-style stacking with a (4,64,64) model '
+                             'input so velocity is observable without token context.')
+    parser.add_argument('--eval-temperature', dest='eval_temperature', type=float, default=None,
+                        help='Evaluation MCTS action-selection temperature. 0 (default) keeps the '
+                             'legacy deterministic argmax; a positive value samples from the visit '
+                             'distribution to probe deterministic-cycle artifacts.')
     parser.add_argument('--root-cache-key-round-decimals', type=int, default=None,
                         help='Quantize root latent cache keys to this decimal precision (0 disables).')
     parser.add_argument('--kv-cache-clear-interval', type=int, default=None,
@@ -1219,6 +1316,10 @@ if __name__ == "__main__":
         num_unroll_steps_override=args.num_unroll_steps,
         obs_loss_weight_override=args.obs_loss_weight,
         value_loss_weight_override=args.value_loss_weight,
+        target_update_theta_override=args.target_update_theta,
+        cosine_lr_scheduler_override=args.cosine_lr_scheduler,
+        frame_stack_num_override=args.frame_stack_num,
+        eval_temperature_override=args.eval_temperature,
         root_cache_key_round_decimals_override=args.root_cache_key_round_decimals,
         kv_cache_clear_interval_override=args.kv_cache_clear_interval,
         empty_cuda_cache_on_cache_reset_override=args.empty_cuda_cache_on_cache_reset,

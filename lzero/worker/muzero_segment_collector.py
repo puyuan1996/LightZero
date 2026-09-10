@@ -588,6 +588,33 @@ class MuZeroSegmentCollector(ISerialCollector):
                         self._policy.reset([env_id])
                         self._reset_stat(env_id)
                         self._logger.info(f'Env {env_id} had an abnormal step, info: {episode_timestep.info}')
+                        # Drop the in-flight segment as well: it ends before the
+                        # abnormal transition, and continuing it after the env
+                        # reset would splice a trajectory discontinuity into the
+                        # stored data.  Re-sync the observation window from the
+                        # fresh ``ready_obs`` exactly like the done path below.
+                        reset_obs = self._env.ready_obs
+                        while env_id not in reset_obs:
+                            time.sleep(retry_waiting_time)
+                            reset_obs = self._env.ready_obs
+                        reset_obs = reset_obs[env_id]
+                        self.action_mask_dict[env_id] = to_ndarray(reset_obs['action_mask'])
+                        self.to_play_dict[env_id] = to_ndarray(reset_obs['to_play'])
+                        self.timestep_dict[env_id] = to_ndarray(reset_obs.get('timestep', -1))
+                        if self.policy_config.use_ture_chance_label_in_chance_encoder:
+                            self.chance_dict[env_id] = to_ndarray(reset_obs['chance'])
+                        reset_observation_window(
+                            observation_window_stack[env_id],
+                            reset_obs['observation'],
+                            self.policy_config.model.frame_stack_num,
+                        )
+                        game_segments[env_id] = self._attach_segment_context(GameSegment(
+                            self._env.action_space,
+                            game_segment_length=self.policy_config.game_segment_length,
+                            config=self.policy_config,
+                            task_id=self.task_id
+                        ), None, train_iter)
+                        game_segments[env_id].reset(observation_window_stack[env_id])
                         continue
 
                     obs, reward, done, info = episode_timestep.obs, episode_timestep.reward, episode_timestep.done, episode_timestep.info
