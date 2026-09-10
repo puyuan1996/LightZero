@@ -77,6 +77,7 @@ class UniZeroPPOPolicy(UniZeroPolicy):
                 weight_decay=self._cfg.weight_decay,
                 device_type=self._cfg.device,
                 betas=(0.9, 0.95),
+                no_decay_bias_norm=self._cfg.get('no_decay_bias_norm', True),
             )
 
         if self._cfg.cos_lr_scheduler:

@@ -523,7 +523,9 @@ def apply_open_loop_recurrent_entropy_weight(
     return recurrent_loss - fixed_policy_loss + policy_ce - entropy_weight * policy_entropy
 
 
-def configure_optimizer_unizero(model, learning_rate, weight_decay, device_type, betas):
+def configure_optimizer_unizero(
+        model, learning_rate, weight_decay, device_type, betas, no_decay_bias_norm=True
+):
     """
     Configure optimizer with differentiated learning rates and weight decay for encoder/backbone/head of UniZero model.
     """
@@ -542,28 +544,41 @@ def configure_optimizer_unizero(model, learning_rate, weight_decay, device_type,
 
     # 3. Set different optimizer parameters for each group (especially learning rate)
     #    We still use AdamW here, but with more reasonable learning rate settings
-    optim_groups = [
-        {
-            'params': list(tokenizer_params.values()),
-            'lr': learning_rate,  # Tokenizer uses base learning rate, e.g., 1e-4
-            'weight_decay': weight_decay
-        },
-        {
-            'params': list(transformer_params.values()),
-            'lr': learning_rate,  # Tokenizer uses base learning rate, e.g., 1e-4
-            'weight_decay': weight_decay
-        },
-        {
-            'params': list(head_params.values()),
-            'lr': learning_rate,  # Heads also use base learning rate, e.g., 1e-4
-            'weight_decay': weight_decay
-
-        }
-    ]
+    optim_groups = []
+    named_groups = (
+        ('tokenizer', tokenizer_params), ('transformer', transformer_params), ('head', head_params)
+    )
+    for group_name, group_params in named_groups:
+        if no_decay_bias_norm:
+            # Follow the nanoGPT convention used by ``configure_optimizers_nanogpt``:
+            # only tensors with ndim >= 2 (linear/conv/embedding matrices) are decayed,
+            # while 1-D tensors (LayerNorm gains, biases, scalars) are not. UniZero
+            # pins the absolute scale of its latents entirely on LayerNorm affine
+            # parameters (the obs-prediction target is the EMA encoder itself), so
+            # decaying LN gains ratchets the representation scale down over long runs.
+            decay_params = [p for p in group_params.values() if p.dim() >= 2]
+            nodecay_params = [p for p in group_params.values() if p.dim() < 2]
+            if decay_params:
+                optim_groups.append(
+                    {'params': decay_params, 'lr': learning_rate, 'weight_decay': weight_decay}
+                )
+            if nodecay_params:
+                optim_groups.append(
+                    {'params': nodecay_params, 'lr': learning_rate, 'weight_decay': 0.0}
+                )
+        else:
+            optim_groups.append(
+                {
+                    'params': list(group_params.values()),
+                    'lr': learning_rate,
+                    'weight_decay': weight_decay,
+                }
+            )
 
     logging.info("--- Optimizer Groups ---")
     logging.info(f"Transformer LR: {learning_rate}")
     logging.info(f"Tokenizer/Heads LR: {learning_rate}")
+    logging.info(f"Weight decay: {weight_decay} (no_decay_bias_norm={no_decay_bias_norm})")
 
     optimizer = torch.optim.AdamW(optim_groups, betas=betas)
     return optimizer
@@ -950,6 +965,11 @@ class UniZeroPolicy(MuZeroPolicy):
         target_update_freq_for_intrinsic_reward=1000,
         # (float) Weight decay for training policy network.
         weight_decay=1e-4,
+        # (bool) Whether LayerNorm gains/biases and other 1-D tensors are excluded
+        # from weight decay in the ``AdamW_mix_lr_wdecay`` optimizer (nanoGPT
+        # convention). UniZero anchors its latent scale only on LN affine
+        # parameters, so decaying them slowly collapses the representation scale.
+        no_decay_bias_norm=True,
         # (float) One-order Momentum in optimizer, which stabilizes the training process (gradient direction).
         momentum=0.9,
         # (float) The maximum constraint value of gradient norm clipping.
@@ -1197,6 +1217,7 @@ class UniZeroPolicy(MuZeroPolicy):
                 weight_decay=self._cfg.weight_decay,
                 device_type=self._cfg.device,
                 betas=(0.9, 0.95),
+                no_decay_bias_norm=self._cfg.get('no_decay_bias_norm', True),
             )
 
         if self._cfg.cos_lr_scheduler:

@@ -233,6 +233,7 @@ def _default_run_name(
         cosine_lr_scheduler=False,
         frame_stack_num=1,
         eval_temperature=0.0,
+        no_decay_bias_norm=True,
 ):
     """Build a self-describing run name from the resolved key config settings."""
     parts = [
@@ -247,6 +248,9 @@ def _default_run_name(
         f'value{value_loss_weight:g}',
         f'ema{target_update_theta:g}',
         'coslr' if cosine_lr_scheduler else 'constlr',
+        # The LN/bias no-decay grouping is the default; only the legacy
+        # decay-everything optimizer is encoded in the run name.
+        None if no_decay_bias_norm else 'wdall',
         # Only non-default stacking is encoded so legacy stack-1 run names stay
         # directly comparable with historical batches.
         f'stack{frame_stack_num}' if frame_stack_num != 1 else None,
@@ -443,6 +447,7 @@ def main(
         value_loss_weight_override=None,
         target_update_theta_override=None,
         cosine_lr_scheduler_override=None,
+        no_decay_bias_norm_override=None,
         frame_stack_num_override=None,
         eval_temperature_override=None,
         root_cache_key_round_decimals_override=None,
@@ -547,6 +552,10 @@ def main(
     cosine_lr_scheduler = (
         False if cosine_lr_scheduler_override is None
         else bool(cosine_lr_scheduler_override)
+    )
+    no_decay_bias_norm = (
+        True if no_decay_bias_norm_override is None
+        else bool(no_decay_bias_norm_override)
     )
     frame_stack_num = _resolve_frame_stack_num(frame_stack_num_override)
     observation_shape, gray_scale, image_channel = _stacked_observation_spec(frame_stack_num)
@@ -791,6 +800,7 @@ def main(
             optim_type='AdamW_mix_lr_wdecay',
             learning_rate=0.0001,
             weight_decay=1e-2,
+            no_decay_bias_norm=no_decay_bias_norm,
             target_update_theta=target_update_theta,
             cos_lr_scheduler=cosine_lr_scheduler,
             batch_size=batch_size,
@@ -925,6 +935,7 @@ def main(
             value_loss_weight=value_loss_weight,
             target_update_theta=target_update_theta,
             cosine_lr_scheduler=cosine_lr_scheduler,
+            no_decay_bias_norm=no_decay_bias_norm,
             frame_stack_num=frame_stack_num,
             eval_temperature=eval_temperature,
             open_loop_consistency_weight=open_loop_consistency_weight_override or 0,
@@ -1114,6 +1125,18 @@ if __name__ == "__main__":
         help='Keep the constant learner LR (default).'
     )
     parser.set_defaults(cosine_lr_scheduler=None)
+    wd_group = parser.add_mutually_exclusive_group()
+    wd_group.add_argument(
+        '--no-decay-bias-norm', dest='no_decay_bias_norm', action='store_true',
+        help='Exclude LayerNorm gains/biases and other 1-D tensors from weight decay (default; '
+             'protects the LN-anchored latent scale from the weight-decay ratchet).'
+    )
+    wd_group.add_argument(
+        '--decay-bias-norm', dest='no_decay_bias_norm', action='store_false',
+        help='Apply weight decay to every parameter including LayerNorm gains and biases '
+             '(legacy AdamW_mix_lr_wdecay behavior).'
+    )
+    parser.set_defaults(no_decay_bias_norm=None)
     parser.add_argument('--frame-stack-num', dest='frame_stack_num', type=int, default=None,
                         choices=(1, 4),
                         help='Observation frame stack. 1 keeps the legacy RGB (3,64,64) recipe; '
@@ -1318,6 +1341,7 @@ if __name__ == "__main__":
         value_loss_weight_override=args.value_loss_weight,
         target_update_theta_override=args.target_update_theta,
         cosine_lr_scheduler_override=args.cosine_lr_scheduler,
+        no_decay_bias_norm_override=args.no_decay_bias_norm,
         frame_stack_num_override=args.frame_stack_num,
         eval_temperature_override=args.eval_temperature,
         root_cache_key_round_decimals_override=args.root_cache_key_round_decimals,
