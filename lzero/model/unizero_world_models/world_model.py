@@ -467,6 +467,8 @@ class WorldModel(
         """
         if norm_option == 'LayerNorm':
             return nn.LayerNorm(self.config.embed_dim, eps=1e-5)
+        elif norm_option == 'LayerNormNoAffine':
+            return nn.LayerNorm(self.config.embed_dim, eps=1e-5, elementwise_affine=False)
         elif norm_option == 'SimNorm':
             return SimNorm(simnorm_dim=self.config.group_size)
         else:

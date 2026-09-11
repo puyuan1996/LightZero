@@ -368,6 +368,7 @@ class LossWithIntermediateLosses:
             'perceptual_loss': self.perceptual_loss_weight,
             'open_loop_consistency_loss': self.open_loop_consistency_loss_weight,
             'open_loop_recurrent_loss': self.open_loop_recurrent_loss_weight,
+            'latent_norm_reg_loss': self.latent_norm_reg_loss_weight,
         }
         for name, weight in component_weights.items():
             value = self.intermediate_losses.get(name)

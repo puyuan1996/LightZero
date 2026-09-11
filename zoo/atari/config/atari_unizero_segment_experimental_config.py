@@ -234,6 +234,10 @@ def _default_run_name(
         frame_stack_num=1,
         eval_temperature=0.0,
         no_decay_bias_norm=True,
+        final_norm_option_in_encoder='LayerNorm',
+        final_norm_option_in_obs_head='LayerNorm',
+        predict_latent_loss_type='mse',
+        latent_norm_reg_weight=0.0,
 ):
     """Build a self-describing run name from the resolved key config settings."""
     parts = [
@@ -246,6 +250,10 @@ def _default_run_name(
         f'temp{collect_temperature:g}',
         f'obs{obs_loss_weight:g}',
         f'value{value_loss_weight:g}',
+        f'encnorm-{final_norm_option_in_encoder}',
+        f'obsnorm-{final_norm_option_in_obs_head}',
+        f'latloss-{predict_latent_loss_type}',
+        f'latreg{latent_norm_reg_weight:g}' if latent_norm_reg_weight > 0 else None,
         f'ema{target_update_theta:g}',
         'coslr' if cosine_lr_scheduler else 'constlr',
         # The LN/bias no-decay grouping is the default; only the legacy
@@ -449,6 +457,10 @@ def main(
         cosine_lr_scheduler_override=None,
         no_decay_bias_norm_override=None,
         latent_norm_reg_weight_override=None,
+        latent_norm_reg_target_override=None,
+        final_norm_option_in_encoder_override=None,
+        final_norm_option_in_obs_head_override=None,
+        predict_latent_loss_type_override=None,
         frame_stack_num_override=None,
         eval_temperature_override=None,
         root_cache_key_round_decimals_override=None,
@@ -564,6 +576,34 @@ def main(
     )
     if latent_norm_reg_weight < 0:
         raise ValueError('latent_norm_reg_weight must be non-negative')
+    latent_norm_reg_target = (
+        0.0 if latent_norm_reg_target_override is None
+        else float(latent_norm_reg_target_override)
+    )
+    if latent_norm_reg_target < 0:
+        raise ValueError('latent_norm_reg_target must be non-negative')
+    final_norm_option_in_encoder = (
+        'LayerNorm' if final_norm_option_in_encoder_override is None
+        else str(final_norm_option_in_encoder_override)
+    )
+    final_norm_option_in_obs_head = (
+        'LayerNorm' if final_norm_option_in_obs_head_override is None
+        else str(final_norm_option_in_obs_head_override)
+    )
+    valid_norm_options = {'LayerNorm', 'LayerNormNoAffine', 'SimNorm'}
+    if final_norm_option_in_encoder not in valid_norm_options:
+        raise ValueError(f'Unsupported encoder final norm: {final_norm_option_in_encoder}')
+    if final_norm_option_in_obs_head not in valid_norm_options:
+        raise ValueError(f'Unsupported observation-head final norm: {final_norm_option_in_obs_head}')
+    predict_latent_loss_type = (
+        'mse' if predict_latent_loss_type_override is None
+        else str(predict_latent_loss_type_override)
+    )
+    if predict_latent_loss_type not in {'mse', 'group_kl', 'cos_sim'}:
+        raise ValueError(f'Unsupported predict_latent_loss_type: {predict_latent_loss_type}')
+    if predict_latent_loss_type == 'group_kl' and (
+            final_norm_option_in_encoder != 'SimNorm' or final_norm_option_in_obs_head != 'SimNorm'):
+        raise ValueError('predict_latent_loss_type=group_kl requires SimNorm for encoder and observation head')
     frame_stack_num = _resolve_frame_stack_num(frame_stack_num_override)
     observation_shape, gray_scale, image_channel = _stacked_observation_spec(frame_stack_num)
     eval_temperature = _resolve_eval_temperature(eval_temperature_override)
@@ -761,10 +801,11 @@ def main(
                     latent_recon_loss_weight=0.0,
                     perceptual_loss_weight=0.0,
                     latent_norm_reg_weight=latent_norm_reg_weight,
+                    latent_norm_reg_target=latent_norm_reg_target,
                     norm_type=norm_type,
-                    final_norm_option_in_obs_head='LayerNorm',
-                    final_norm_option_in_encoder='LayerNorm',
-                    predict_latent_loss_type='mse',
+                    final_norm_option_in_obs_head=final_norm_option_in_obs_head,
+                    final_norm_option_in_encoder=final_norm_option_in_encoder,
+                    predict_latent_loss_type=predict_latent_loss_type,
                     support_size=601,
                     # Used as the fixed entropy coefficient when adaptive alpha is disabled.
                     policy_entropy_weight=fixed_alpha,
@@ -958,6 +999,10 @@ def main(
             max_env_step=max_env_step,
             collector_episode_life=collector_episode_life,
             collector_clip_rewards=collector_clip_rewards,
+            final_norm_option_in_encoder=final_norm_option_in_encoder,
+            final_norm_option_in_obs_head=final_norm_option_in_obs_head,
+            predict_latent_loss_type=predict_latent_loss_type,
+            latent_norm_reg_weight=latent_norm_reg_weight,
         )
     run_name = _safe_run_name(run_name)
 
@@ -1148,6 +1193,17 @@ if __name__ == "__main__":
     parser.add_argument('--latent-norm-reg-weight', dest='latent_norm_reg_weight', type=float, default=None,
                         help='Weight of the soft anchor pulling per-token encoder latent L2 norms to '
                              'sqrt(embed_dim) (default 0 = disabled; R3 fallback for latent scale drift).')
+    parser.add_argument('--latent-norm-reg-target', dest='latent_norm_reg_target', type=float, default=None,
+                        help='Target latent L2 norm for the optional soft anchor (default sqrt(embed_dim)).')
+    parser.add_argument('--final-norm-option-in-encoder', dest='final_norm_option_in_encoder',
+                        choices=('LayerNorm', 'LayerNormNoAffine', 'SimNorm'), default=None,
+                        help='Final encoder normalization used by the image representation.')
+    parser.add_argument('--final-norm-option-in-obs-head', dest='final_norm_option_in_obs_head',
+                        choices=('LayerNorm', 'LayerNormNoAffine', 'SimNorm'), default=None,
+                        help='Final observation prediction normalization; use SimNorm with group_kl.')
+    parser.add_argument('--predict-latent-loss-type', dest='predict_latent_loss_type',
+                        choices=('mse', 'group_kl', 'cos_sim'), default=None,
+                        help='Latent observation prediction loss (default mse).')
     parser.add_argument('--frame-stack-num', dest='frame_stack_num', type=int, default=None,
                         choices=(1, 4),
                         help='Observation frame stack. 1 keeps the legacy RGB (3,64,64) recipe; '
@@ -1354,6 +1410,10 @@ if __name__ == "__main__":
         cosine_lr_scheduler_override=args.cosine_lr_scheduler,
         no_decay_bias_norm_override=args.no_decay_bias_norm,
         latent_norm_reg_weight_override=args.latent_norm_reg_weight,
+        latent_norm_reg_target_override=args.latent_norm_reg_target,
+        final_norm_option_in_encoder_override=args.final_norm_option_in_encoder,
+        final_norm_option_in_obs_head_override=args.final_norm_option_in_obs_head,
+        predict_latent_loss_type_override=args.predict_latent_loss_type,
         frame_stack_num_override=args.frame_stack_num,
         eval_temperature_override=args.eval_temperature,
         root_cache_key_round_decimals_override=args.root_cache_key_round_decimals,
